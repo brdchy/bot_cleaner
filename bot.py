@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from os import name
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, types
 from aiogram.filters.command import Command
 from aiogram.types import Message, ChatMemberUpdated
 
@@ -9,21 +9,20 @@ from aiogram.types import Message, ChatMemberUpdated
 logging.basicConfig(level=logging.INFO)
 
 # Объект бота
-bot = Bot(token="TOKEN")
-dp = Dispatcher()
+bot = Bot(token="token")
+dp = Dispatcher(bot=bot)
 
-
-
+@dp.message()
 async def listen_update (message: Message):
-    chat_member_updated = message.chat_member_updated
+    if message.content_type == types.ContentType.NEW_CHAT_MEMBERS:
+        await message.delete()
+    if message.content_type == types.ContentType.LEFT_CHAT_MEMBER:
+        await message.delete()
 
-    if chat_member_updated:  # Проверяем, является ли это системным сообщением о входе участника
-        await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-        
-
-# Запуск процесса поллинга новых апдейтов
+    
 async def main():
     await dp.start_polling(bot)
 
-if name == "main":
+if __name__ == "__main__":
     asyncio.run(main())
+
