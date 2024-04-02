@@ -22,6 +22,46 @@ async def main():
     # Объект бота
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(bot=bot)
+    bad_words = []
+    adminsId = [937630169, 410701449]
+    with open("bad_words.txt", "r", encoding='utf-8') as f:
+        bad_words = f.readlines()
+        bad_words = [word.replace("\n", "").strip() for word in bad_words]
+    white_list = []
+
+    with open("white_list.txt", "r", encoding='utf-8') as f:
+        white_list = f.readlines()
+        white_list = [word.replace("\n", "").strip() for word in white_list]
+
+    # Обработчик команды /whitelist
+    @dp.message(F.text, Command("whitelist"))
+    async def add_to_whitelist(message: types.Message):
+        if message.from_user.id in adminsId:
+        # Получаем слово после команды
+            word = message.text.split(' ')[-1]
+            if word:
+                white_list.append(word)
+                # Добавляем слово в white_list.txt
+                with open("white_list.txt", "a", encoding='utf-8') as f:
+                    f.write("\n" + word)
+                await message.reply(f"Слово '{word}' добавлено в вайтлист.")
+            else:
+                await message.reply("Укажите слово для добавления в вайтлист.")
+
+    # Обработчик команды /blacklist
+    @dp.message(F.text, Command("blacklist"))
+    async def add_to_blacklist(message: types.Message):
+        if message.from_user.id in adminsId:
+        # Получаем слово после команды
+            word = message.text.split(' ')[-1]
+            if word:
+                bad_words.append(word)
+                # Добавляем слово в bad_words.txt
+                with open("bad_words.txt", "a", encoding='utf-8') as f:
+                    f.write("\n" + word)
+                await message.reply(f"Слово '{word}' добавлено в черный список.")
+            else:
+                await message.reply("Укажите слово для добавления в черный список.")
 
     @dp.message(F.new_chat_members)
     async def handle_channel_post(message: types.Message):
@@ -31,13 +71,7 @@ async def main():
     async def handle_channel_post(message: types.Message):
         await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
 
-    bad_words = []
-
-    with open("bad_words.txt", "r", encoding='utf-8') as f:
-        bad_words = f.readlines()
-        bad_words = [word.replace("\n", "").strip() for word in bad_words]
-
-
+   
     def replace_english_letters(text):
         replacements = {
         'a': 'а',
@@ -120,7 +154,8 @@ async def main():
 
     def is_bad_word(source: list, dist: str):
         current_percent = 85
-
+        if dist in white_list:
+            return False
         for word in source:
             ratio = fuzz.ratio(dist, word)
 
@@ -145,7 +180,7 @@ async def main():
             # replace_english_letters(message_text)
         message_text = message_text.replace('\n', ' ')
         # print("hello")
-
+        bad_word = ''
         flag = False
 
         for word in message_text.split(' '):
@@ -156,13 +191,20 @@ async def main():
             #print("DEBUG:", word, translit_word, is_bad)
             
             if is_bad:
+                bad_word = word
                 flag = True
-        return flag
+        return bad_word, flag
     
     @dp.message(F.text)
     async def delete_bad_words(message: types.Message):
-        if check_message(message.text):
+        bad_word, is_bad = check_message(message.text)
+        if is_bad:
             await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+            await bot.send_message(
+                chat_id=410701449,
+                text=f"{message.from_user.username}, {bad_word}, {message.text}"
+            )           
+            
 
     try:
         await dp.start_polling(bot)
