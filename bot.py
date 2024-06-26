@@ -23,7 +23,7 @@ dp = Dispatcher(bot=bot)
 admin_messages = {}
 
 adminsId = []
-with open('admins_list.txt', 'r') as file:
+with open('txts/admins_list.txt', 'r') as file:
     adminsId = [int(line.strip()) for line in file if line.strip().isdigit()]
 print(adminsId)
 
@@ -231,17 +231,17 @@ async def toggle_delete(callback: CallbackQuery):
 
 
 bad_words = []
-with open("bad_words.txt", "r", encoding='utf-8') as f:
+with open("txt/bad_words.txt", "r", encoding='utf-8') as f:
     bad_words = f.readlines()
     bad_words = [word.replace("\n", "").strip() for word in bad_words]
 
 white_list = []
-with open("white_list.txt", "r", encoding='utf-8') as f:
+with open("txts/white_list.txt", "r", encoding='utf-8') as f:
     white_list = f.readlines()
     white_list = [word.replace("\n", "").strip() for word in white_list]
 
 delete_list = []
-with open("delete_list.txt", "r", encoding='utf-8') as f:
+with open("txts/delete_list.txt", "r", encoding='utf-8') as f:
     delete_list = f.readlines()
     delete_list = [word.replace("\n", "").strip() for word in delete_list]
 
