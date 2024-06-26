@@ -414,9 +414,6 @@ async def notify_admins(message: types.Message, reason: str, message_text):
 async def work(message: types.Message):
     global is_delete_bw, is_delete_ad
 
-    # if message.content_type in [types.ContentType.NEW_CHAT_MEMBERS, types.ContentType.LEFT_CHAT_MEMBER]:
-    #     await message.delete()
-    #     return
     text_to_check = message.text or message.caption
 
     if text_to_check:
