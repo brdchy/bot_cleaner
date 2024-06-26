@@ -231,7 +231,7 @@ async def toggle_delete(callback: CallbackQuery):
 
 
 bad_words = []
-with open("txt/bad_words.txt", "r", encoding='utf-8') as f:
+with open("txts/bad_words.txt", "r", encoding='utf-8') as f:
     bad_words = f.readlines()
     bad_words = [word.replace("\n", "").strip() for word in bad_words]
 
