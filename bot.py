@@ -76,9 +76,13 @@ async def add_to_admin_list(message: types.Message):
         # Получаем аргументы после команды
         args = message.text.split()[1:]
 
+        if not args:
+            await message.reply("Использование: /add_admin user_id")
+            return
+        
         # Попытка добавить по ID
         try:
-            user_id = int(args[0])  # Проверяем, что это действительно число
+            user_id = int(args[0])
             user = await message.bot.get_chat(user_id)
             username = user.username or "без имени пользователя"
         except ValueError:
@@ -107,7 +111,7 @@ async def remove_from_adminlist(message: types.Message):
         args = message.text.split()[1:]
 
         if not args:
-            await message.reply("Использование: /removeAdmin @username или /removeAdmin user_id")
+            await message.reply("Использование: /remove_admin user_id")
             return
 
         # Попытка удалить по ID
@@ -136,7 +140,7 @@ async def remove_from_adminlist(message: types.Message):
 
 @dp.message(F.text, Command("my_id"))
 async def id(message: types.Message):
-    await message.answer(f"Ваш ID:\n{message.from_user.id}", parse_mode="MarkdownV2")
+    await message.answer(f"Ваш ID:\n{message.from_user.id}")
 
 
 # Обработчик команды /blacklist
@@ -171,7 +175,7 @@ async def add_to_admin(message: types.Message):
             await message.reply("Укажите слово для добавления в белый список.")
 
 
-async def send_control_message(message: types.Message, admin):
+async def send_control_message(message: types.Message, adminId):
     global is_delete_bw
     global is_delete_ad
 
@@ -191,7 +195,7 @@ async def send_control_message(message: types.Message, admin):
         ],
     ]
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
-    await bot.send_message(chat_id=admin, text="Режим работы", reply_markup=keyboard)
+    await bot.send_message(chat_id=adminId, text="Режим работы", reply_markup=keyboard)
 
 
 @dp.callback_query(F.data.startswith("toggle_delete_"))
@@ -248,7 +252,6 @@ with open("txts/delete_list.txt", "r", encoding='utf-8') as f:
 
 def extract_regular_chars(text):
     regular_chars = re.sub('[^a-zA-Zа-яА-Я0-9\s]', '', text)
-
     return regular_chars
 
 
