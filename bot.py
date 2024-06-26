@@ -136,7 +136,7 @@ async def remove_from_adminlist(message: types.Message):
 
 @dp.message(F.text, Command("my_id"))
 async def id(message: types.Message):
-    await message.answer(f"Ваш ID:\n```md\n{message.from_user.id}\n```", parse_mode="MarkdownV2")
+    await message.answer(f"Ваш ID:\n{message.from_user.id}", parse_mode="MarkdownV2")
 
 
 # Обработчик команды /blacklist
