@@ -539,8 +539,6 @@ async def work(message: types.Message):
             except Exception as e:
                 print(f"Ошибка при удалении сообщения или бане пользователя: {e}")
                 return
-        if text_to_check in white_list:
-            return
 
         if check_bw(text_to_check):
             if is_delete_bw:
