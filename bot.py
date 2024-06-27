@@ -72,75 +72,114 @@ async def change(message: types.Message):
 # Обработчик команды /addAdmin
 @dp.message(F.text, Command("add_admin"))
 async def add_to_admin_list(message: types.Message):
-    if message.from_user.id in adminsId:
-        # Получаем аргументы после команды
-        args = message.text.split()[1:]
+    if message.from_user.id not in adminsId:
+        await message.reply("У вас нет прав для выполнения этой команды.")
+        return
 
+    # Проверяем, является ли сообщение ответом на другое сообщение
+    if message.reply_to_message:
+        user = message.reply_to_message.from_user
+        user_id = user.id
+        username = user.username or "без имени пользователя"
+    else:
+        # Если сообщение не является ответом, пробуем получить ID из аргументов
+        args = message.text.split()[1:]
         if not args:
-            await message.reply("Использование: /add_admin user_id")
+            await message.reply("Использование: /add_admin user_id или ответьте на сообщение пользователя командой /add_admin")
             return
         
-        # Попытка добавить по ID
         try:
             user_id = int(args[0])
             user = await message.bot.get_chat(user_id)
             username = user.username or "без имени пользователя"
         except ValueError:
-            await message.reply("Некорректный ID пользователя. Используйте число.")
+            await message.reply("Некорректный ID пользователя. Используйте число или ответьте на сообщение пользователя.")
             return
         except Exception:
             await message.reply(f"Не удалось найти пользователя с ID {args[0]}.")
             return
 
-        if user_id not in adminsId:
-            adminsId.append(user_id)
-            with open("admins_list.txt", "a", encoding='utf-8') as f:
-                f.write("\n" + user_id)
-            await message.reply(f"Админ @{html.escape(username)} (ID: {user_id}) добавлен в админлист.")
-        else:
-            await message.reply(f"Пользователь @{html.escape(username)} (ID: {user_id}) уже является админом.")
+    if user_id not in adminsId:
+        adminsId.append(user_id)
+        with open("txts/admins_list.txt", "a", encoding='utf-8') as f:
+            f.write(f"\n{user_id}")
+        await message.reply(f"Админ @{html.escape(username)} (ID: {user_id}) добавлен в админлист.")
     else:
-        await message.reply("У вас нет прав для выполнения этой команды.")
+        await message.reply(f"Пользователь @{html.escape(username)} (ID: {user_id}) уже является админом.")
 
 
 # Обработчик команды /removeAdmin
 @dp.message(F.text, Command("remove_admin"))
 async def remove_from_adminlist(message: types.Message):
-    if message.from_user.id in adminsId:
-        # Получаем аргументы после команды
+    if message.from_user.id not in adminsId:
+        await message.reply("У вас нет прав для выполнения этой команды.")
+        return
+
+    # Проверяем, является ли сообщение ответом на другое сообщение
+    if message.reply_to_message:
+        user = message.reply_to_message.from_user
+        user_id = user.id
+        username = user.username or "без имени пользователя"
+    else:
+        # Если сообщение не является ответом, пробуем получить ID из аргументов
         args = message.text.split()[1:]
-
         if not args:
-            await message.reply("Использование: /remove_admin user_id")
+            await message.reply("Использование: /remove_admin user_id или ответьте на сообщение пользователя командой /remove_admin")
             return
-
-        # Попытка удалить по ID
+        
         try:
-            user_id = (int(args[0]))  # Проверяем, что это действительно число
+            user_id = int(args[0])
             user = await message.bot.get_chat(user_id)
             username = user.username or "без имени пользователя"
         except ValueError:
-            await message.reply("Некорректный ID пользователя. Используйте число.")
+            await message.reply("Некорректный ID пользователя. Используйте число или ответьте на сообщение пользователя.")
             return
         except Exception:
             await message.reply(f"Не удалось найти пользователя с ID {args[0]}.")
             return
 
-        if int(user_id) in adminsId:
-            adminsId.remove(user_id)
-            # Обновляем файл admins_list.txt
-            with open("admins_list.txt", "w", encoding='utf-8') as f:
-                f.write("\n".join(adminsId))
-            await message.reply(f"Админ @{username} (ID: {user_id}) удален из админлиста.")
-        else:
-            await message.reply(f"Пользователь @{username} (ID: {user_id}) не является админом.")
+    if user_id in adminsId:
+        adminsId.remove(user_id)
+        # Обновляем файл admins_list.txt
+        with open("txts/admins_list.txt", "w", encoding='utf-8') as f:
+            f.write("\n".join(map(str, adminsId)))
+        await message.reply(f"Админ @{html.escape(username)} (ID: {user_id}) удален из админлиста.")
     else:
-        await message.reply("У вас нет прав для выполнения этой команды.")
+        await message.reply(f"Пользователь @{html.escape(username)} (ID: {user_id}) не является админом.")
 
 
 @dp.message(F.text, Command("my_id"))
-async def id(message: types.Message):
-    await message.answer(f"Ваш ID:\n{message.from_user.id}")
+async def my_id(message: types.Message):
+    await message.answer(f"Ваш ID:\n```{message.from_user.id}```", parse_mode="MarkdownV2")
+
+
+@dp.message(F.text, Command("chat_id"))
+async def chat_id(message: types.Message):
+    await message.answer(f"ID чата:\n```{message.chat.id}```", parse_mode="MarkdownV2")
+
+
+@dp.message(F.text, Command("get_id"))
+async def get_user_id(message: types.Message):
+    if message.reply_to_message:
+        user_id = message.reply_to_message.from_user.id
+        await message.reply(f"ID пользователя:\n```{user_id}```", parse_mode="MarkdownV2")
+    else:
+        await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+
+
+@dp.message(F.text, Command("mute"))
+async def mute(message: types.Message):
+    if message.from_user.id in adminsId:
+        if message.reply_to_message:
+            user_id = message.reply_to_message.from_user.id
+            user = await message.bot.get_chat(user_id)
+            await bot.restrict_chat_member(message.chat.id, user_id, types.ChatPermissions(can_send_messages=False))
+
+            await message.answer(f"Пользователь @{user.username} замучен на 10 секунд.")
+            # Запускаем задачу для автоматического размучивания через 10 секунд
+            asyncio.create_task(unmute_user(message.chat.id, user_id, 10))
+        else:
+            await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
 
 
 # Обработчик команды /blacklist
@@ -149,14 +188,21 @@ async def add_to_blacklist(message: types.Message):
     if message.from_user.id in adminsId:
     # Получаем слово после команды
         word = message.text.split(' ')[-1]
+
+        if word in bad_words:
+            await message.reply(f"Слово '{word}' уже есть в черном списке.")
+            await asyncio.sleep(0.1)
+
         if word:
             bad_words.append(word)
             # Добавляем слово в bad_words.txt
-            with open("bad_words.txt", "a", encoding='utf-8') as f:
+            with open("txts/bad_words.txt", "a", encoding='utf-8') as f:
                 f.write("\n" + word)
             await message.reply(f"Слово '{word}' добавлено в черный список.")
+            await asyncio.sleep(0.1)
         else:
             await message.reply("Укажите слово для добавления в черный список.")
+            await asyncio.sleep(0.1)
 
 
 # Обработчик команды /whitelist
@@ -165,14 +211,21 @@ async def add_to_admin(message: types.Message):
     if message.from_user.id in adminsId:
     # Получаем слово после команды
         word = message.text.split(' ')[-1]
+
+        if word in white_list:
+            await message.reply(f"Слово '{word}' уже есть в белом списке.")
+            await asyncio.sleep(0.1)
+
         if word:
             white_list.append(word)
             # Добавляем слово в white_list.txt
-            with open("white_list.txt", "a", encoding='utf-8') as f:
+            with open("txts/white_list.txt", "a", encoding='utf-8') as f:
                 f.write("\n" + word)
             await message.reply(f"Слово '{word}' добавлено в белый список.")
+            await asyncio.sleep(0.1)
         else:
             await message.reply("Укажите слово для добавления в белый список.")
+            await asyncio.sleep(0.1)
 
 
 async def send_control_message(message: types.Message, adminId):
@@ -428,6 +481,8 @@ async def work(message: types.Message):
             except Exception as e:
                 print(f"Ошибка при удалении сообщения или бане пользователя: {e}")
                 return
+        if text_to_check in white_list:
+            return
 
         if check_bw(text_to_check):
             if is_delete_bw:
@@ -464,8 +519,11 @@ async def process_callback(callback_query: types.CallbackQuery):
             text_id = params[2]
             message_text = message_texts.get(text_id, "")
 
-            with open("delete_list.txt", "a", encoding='utf-8') as f:
-                f.write("\n" + message_text)
+            if message_text in bad_words or message_text in delete_list:
+                pass
+            else:
+                with open("delete_list.txt", "a", encoding='utf-8') as f:
+                    f.write("\n" + message_text)
             del message_texts[text_id]
 
             await callback_query.answer("Сообщение удалено.")
