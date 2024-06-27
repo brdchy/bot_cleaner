@@ -4,7 +4,7 @@ import html
 import re
 import uuid
 
-from aiogram.filters.command import Command
+from aiogram.filters.command import Command, CommandObject
 from aiogram.types import BotCommand, BotCommandScopeDefault
 from aiogram import F, Bot, Dispatcher, types
 from aiogram.types import CallbackQuery
@@ -85,7 +85,7 @@ async def add_to_admin_list(message: types.Message):
         # Если сообщение не является ответом, пробуем получить ID из аргументов
         args = message.text.split()[1:]
         if not args:
-            await message.reply("Использование: /add_admin user_id или ответьте на сообщение пользователя командой /add_admin")
+            await message.reply("Использование: /add_admin <user_id> или ответьте на сообщение пользователя командой /add_admin")
             return
         
         try:
@@ -124,7 +124,7 @@ async def remove_from_adminlist(message: types.Message):
         # Если сообщение не является ответом, пробуем получить ID из аргументов
         args = message.text.split()[1:]
         if not args:
-            await message.reply("Использование: /remove_admin user_id или ответьте на сообщение пользователя командой /remove_admin")
+            await message.reply("Использование: /remove_admin <user_id> или ответьте на сообщение пользователя командой /remove_admin")
             return
         
         try:
@@ -168,18 +168,77 @@ async def get_user_id(message: types.Message):
 
 
 @dp.message(F.text, Command("mute"))
-async def mute(message: types.Message):
+async def mute(message: types.Message, command: CommandObject):
     if message.from_user.id in adminsId:
+        duration = 10  # Значение по умолчанию, если не указано
+        if command.args:
+            try:
+                duration = int(command.args)
+            except ValueError:
+                await message.reply("Неверный формат. Используйте: /mute <количество_секунд>")
+                return
+    
         if message.reply_to_message:
             user_id = message.reply_to_message.from_user.id
             user = await message.bot.get_chat(user_id)
             await bot.restrict_chat_member(message.chat.id, user_id, types.ChatPermissions(can_send_messages=False))
 
-            await message.answer(f"Пользователь @{user.username} замучен на 10 секунд.")
+            await message.answer(f"Пользователь @{user.username} замучен на {duration} секунд.")
             # Запускаем задачу для автоматического размучивания через 10 секунд
-            asyncio.create_task(unmute_user(message.chat.id, user_id, 10))
+            asyncio.create_task(unmute_user(message.chat.id, user_id, duration))
         else:
             await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+
+
+@dp.message(F.text, Command("unmute"))
+async def unmute(message: types.Message):
+    if message.from_user.id in adminsId:
+        if message.reply_to_message:
+            user_id = message.reply_to_message.from_user.id
+            user = await message.bot.get_chat(user_id)
+            
+            # Снимаем ограничения с пользователя
+            await bot.restrict_chat_member(
+                message.chat.id, 
+                user_id, 
+                types.ChatPermissions(
+                    can_send_messages=True,
+                    can_send_media_messages=True,
+                    can_send_other_messages=True,
+                    can_add_web_page_previews=True
+                )
+            )
+            
+            await message.answer(f"Пользователь @{user.username} размучен.")
+        else:
+            await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+    else:
+        await message.reply("У вас нет прав для использования этой команды.")
+
+
+@dp.message(F.text, Command("ban"))
+async def ban(message: types.Message, command: CommandObject):
+    if message.from_user.id in adminsId:
+        reason = "Причина не указана"
+        if command.args:
+            reason = command.args
+
+        if message.reply_to_message:
+            user_id = message.reply_to_message.from_user.id
+            user = await message.bot.get_chat(user_id)
+            
+            try:
+                # Баним пользователя
+                await bot.ban_chat_member(message.chat.id, user_id)
+                
+                # Отправляем сообщение о бане
+                await message.answer(f"Пользователь @{user.username} забанен.\nПричина: {reason}")
+            except Exception as e:
+                await message.reply(f"Не удалось забанить пользователя: {str(e)}")
+        else:
+            await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+    else:
+        await message.reply("У вас нет прав для использования этой команды.")
 
 
 # Обработчик команды /blacklist
@@ -188,18 +247,17 @@ async def add_to_blacklist(message: types.Message):
     if message.from_user.id in adminsId:
     # Получаем слово после команды
         word = message.text.split(' ')[-1]
-
-        if word in bad_words:
-            await message.reply(f"Слово '{word}' уже есть в черном списке.")
-            await asyncio.sleep(0.1)
-
         if word:
-            bad_words.append(word)
-            # Добавляем слово в bad_words.txt
-            with open("txts/bad_words.txt", "a", encoding='utf-8') as f:
-                f.write("\n" + word)
-            await message.reply(f"Слово '{word}' добавлено в черный список.")
-            await asyncio.sleep(0.1)
+            if word in bad_words:
+                await message.reply(f"Слово '{word}' уже есть в черном списке.")
+                await asyncio.sleep(0.1)
+            else:
+                bad_words.append(word)
+                # Добавляем слово в bad_words.txt
+                with open("txts/bad_words.txt", "a", encoding='utf-8') as f:
+                    f.write("\n" + word)
+                await message.reply(f"Слово '{word}' добавлено в черный список.")
+                await asyncio.sleep(0.1)
         else:
             await message.reply("Укажите слово для добавления в черный список.")
             await asyncio.sleep(0.1)
@@ -212,17 +270,17 @@ async def add_to_admin(message: types.Message):
     # Получаем слово после команды
         word = message.text.split(' ')[-1]
 
-        if word in white_list:
-            await message.reply(f"Слово '{word}' уже есть в белом списке.")
-            await asyncio.sleep(0.1)
-
         if word:
-            white_list.append(word)
-            # Добавляем слово в white_list.txt
-            with open("txts/white_list.txt", "a", encoding='utf-8') as f:
-                f.write("\n" + word)
-            await message.reply(f"Слово '{word}' добавлено в белый список.")
-            await asyncio.sleep(0.1)
+            if word in white_list:
+                await message.reply(f"Слово '{word}' уже есть в белом списке.")
+                await asyncio.sleep(0.1)
+            else:
+                white_list.append(word)
+                # Добавляем слово в white_list.txt
+                with open("txts/white_list.txt", "a", encoding='utf-8') as f:
+                    f.write("\n" + word)
+                await message.reply(f"Слово '{word}' добавлено в белый список.")
+                await asyncio.sleep(0.1)
         else:
             await message.reply("Укажите слово для добавления в белый список.")
             await asyncio.sleep(0.1)
