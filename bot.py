@@ -3,6 +3,7 @@ import logging
 import html
 import re
 import uuid
+import csv
 
 from aiogram.filters.command import Command, CommandObject
 from aiogram.types import BotCommand, BotCommandScopeDefault
@@ -27,6 +28,14 @@ with open('txts/admins_list.txt', 'r') as file:
     adminsId = [int(line.strip()) for line in file if line.strip().isdigit()]
 print(adminsId)
 
+ad_patterns = []
+with open('txts/ad_patterns.csv', 'r', encoding='utf-8') as file:
+    reader = csv.reader(file)
+    for row in reader:
+        if row:
+            pattern = row[0]
+            ad_patterns.append(re.compile(r'' + pattern, re.IGNORECASE))
+
 is_delete_ad = False
 is_delete_bw = False
 
@@ -37,8 +46,12 @@ async def set_commands(bot: Bot):
         BotCommand(command='mode', description='Изменить режим работы'),
         BotCommand(command='whitelist', description='Добавить слово в белый список'),
         BotCommand(command='blacklist', description='Добавить слово в черный список'),
+        BotCommand(command='pattern', description='Добавить паттерн рекламы'),
         BotCommand(command='add_admin', description='Добавить админа'),
         BotCommand(command='remove_admin', description='Добавить убрать админа'),
+        BotCommand(command='mute', description='Замутить пользователя'),
+        BotCommand(command='unmute', description='Размутить пользователя'),
+        BotCommand(command='ban', description='Забанить пользователя'),
         ]
     await bot.set_my_commands(commands, BotCommandScopeDefault())
 
@@ -47,20 +60,10 @@ async def start_bot(bot: Bot):
     await set_commands(bot)
 
 
-@dp.message(F.new_chat_members)
-async def handle_channel_post(message: types.Message):
-    await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-
-
-@dp.message(F.left_chat_member)
-async def handle_channel_post(message: types.Message):
-    await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-
-
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     if message.from_user.id in adminsId:
-        await bot.send_message(chat_id=message.from_user.id ,text="Привет")
+        await message.answer(text="Привет")
 
 
 @dp.message(Command("mode"))
@@ -69,7 +72,6 @@ async def change(message: types.Message):
         await send_control_message(message, message.from_user.id)
 
 
-# Обработчик команды /addAdmin
 @dp.message(F.text, Command("add_admin"))
 async def add_to_admin_list(message: types.Message):
     if message.from_user.id not in adminsId:
@@ -108,7 +110,6 @@ async def add_to_admin_list(message: types.Message):
         await message.reply(f"Пользователь @{html.escape(username)} (ID: {user_id}) уже является админом.")
 
 
-# Обработчик команды /removeAdmin
 @dp.message(F.text, Command("remove_admin"))
 async def remove_from_adminlist(message: types.Message):
     if message.from_user.id not in adminsId:
@@ -170,7 +171,7 @@ async def get_user_id(message: types.Message):
 @dp.message(F.text, Command("mute"))
 async def mute(message: types.Message, command: CommandObject):
     if message.from_user.id in adminsId:
-        duration = 10  # Значение по умолчанию, если не указано
+        duration = 300  # Значение по умолчанию, если не указано
         if command.args:
             try:
                 duration = int(command.args)
@@ -184,7 +185,7 @@ async def mute(message: types.Message, command: CommandObject):
             await bot.restrict_chat_member(message.chat.id, user_id, types.ChatPermissions(can_send_messages=False))
 
             await message.answer(f"Пользователь @{user.username} замучен на {duration} секунд.")
-            # Запускаем задачу для автоматического размучивания через 10 секунд
+            # Запускаем задачу для автоматического размучивания через 300 секунд
             asyncio.create_task(unmute_user(message.chat.id, user_id, duration))
         else:
             await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
@@ -216,10 +217,24 @@ async def unmute(message: types.Message):
         await message.reply("У вас нет прав для использования этой команды.")
 
 
+async def unmute_user(chat_id: int, user_id: int, delay: int):
+    await asyncio.sleep(delay)
+    try:
+        await bot.restrict_chat_member(chat_id, user_id, types.ChatPermissions(
+            can_send_messages=True,
+            can_send_media_messages=True,
+            can_send_other_messages=True,
+            can_add_web_page_previews=True
+        ))
+        print(f"Пользователь {user_id} был автоматически размучен в чате {chat_id}")
+    except Exception as e:
+        print(f"Не удалось размутить пользователя {user_id} в чате {chat_id}: {str(e)}")
+
+
 @dp.message(F.text, Command("ban"))
 async def ban(message: types.Message, command: CommandObject):
     if message.from_user.id in adminsId:
-        reason = "Причина не указана"
+        reason = "причина не указана"
         if command.args:
             reason = command.args
 
@@ -241,12 +256,15 @@ async def ban(message: types.Message, command: CommandObject):
         await message.reply("У вас нет прав для использования этой команды.")
 
 
-# Обработчик команды /blacklist
 @dp.message(F.text, Command("blacklist"))
 async def add_to_blacklist(message: types.Message):
     if message.from_user.id in adminsId:
     # Получаем слово после команды
-        word = message.text.split(' ')[-1]
+        message_text = message.text.split(maxsplit=1)
+        if len(message_text) < 2:
+            await message.reply("Пожалуйста, укажите плохое слово после команды /blacklist.")
+            return
+        word = message_text[1]
         if word:
             if word in bad_words:
                 await message.reply(f"Слово '{word}' уже есть в черном списке.")
@@ -263,12 +281,15 @@ async def add_to_blacklist(message: types.Message):
             await asyncio.sleep(0.1)
 
 
-# Обработчик команды /whitelist
 @dp.message(F.text, Command("whitelist"))
 async def add_to_admin(message: types.Message):
     if message.from_user.id in adminsId:
     # Получаем слово после команды
-        word = message.text.split(' ')[-1]
+        message_text = message.text.split(maxsplit=1)
+        if len(message_text) < 2:
+            await message.reply("Пожалуйста, укажите слово после команды /whitelist.")
+            return
+        word = message_text[1]
 
         if word:
             if word in white_list:
@@ -284,6 +305,85 @@ async def add_to_admin(message: types.Message):
         else:
             await message.reply("Укажите слово для добавления в белый список.")
             await asyncio.sleep(0.1)
+
+
+def string_to_regex(input_string):
+    letter_to_regex = {
+        'а': '[aа@]',
+        'б': '[bб6]',
+        'в': '[вbv]',
+        'г': '[гr]',
+        'д': '[дd]',
+        'е': '[eе3]',
+        'ё': '[ёeе]',
+        'ж': '[жg]',
+        'з': '[зz3э]',
+        'и': '[иeеu]',
+        'й': '[йuи]',
+        'к': '[кk]',
+        'л': '[лl]',
+        'м': '[мm]',
+        'н': '[нhn]',
+        'о': '[оo0]',
+        'п': '[пn]',
+        'р': '[pр]',
+        'с': '[cс]',
+        'т': '[тt]',
+        'у': '[уy]',
+        'ф': '[ф]',
+        'х': '[xх]',
+        'ц': '[ц]',
+        'ч': '[ч4]',
+        'ш': '[шw]',
+        'щ': '[щ]',
+        'ъ': '[ъ]',
+        'ы': '[ы]',
+        'ь': '[ь]',
+        'э': '[э3]',
+        'ю': '[ю]',
+        'я': '[я]'
+    }
+
+    result = []
+    for char in input_string.lower():
+        if char == ' ':
+            result.append(r'\s*')
+        elif char in letter_to_regex:
+            result.append(letter_to_regex[char])
+        else:
+            result.append(re.escape(char))
+    
+    regex_pattern = ''.join(result)
+    return regex_pattern
+
+
+@dp.message(F.text, Command("pattern"))
+async def add_pattern(message: types.Message):
+    # Получаем текст после команды
+    pattern_text = message.text.split(maxsplit=1)
+    if len(pattern_text) < 2:
+        await message.reply("Пожалуйста, укажите текст паттерна после команды /pattern.")
+        return
+    new_pattern = pattern_text[1]
+    regex_pattern = string_to_regex(new_pattern)
+
+    # Проверка на наличие паттерна в файле
+    with open('txts/ad_patterns.csv', 'r', newline='', encoding='utf-8') as file:
+        reader = csv.reader(file)
+        existing_patterns = [row[0] for row in reader]
+    
+    if regex_pattern in existing_patterns:
+        await message.reply(f"Паттерн '{new_pattern}' уже существует в базе.")
+        return
+
+    compiled_pattern = re.compile(r'' + regex_pattern, re.IGNORECASE)
+   
+    ad_patterns.append(compiled_pattern)
+    with open('txts/ad_patterns.csv', 'a', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow([regex_pattern])
+   
+    await message.reply(f"Добавлен новый паттерн: {new_pattern}\nРегулярное выражение: {regex_pattern}")
 
 
 async def send_control_message(message: types.Message, adminId):
@@ -358,7 +458,7 @@ with open("txts/white_list.txt", "r", encoding='utf-8') as f:
 delete_list = []
 with open("txts/delete_list.txt", "r", encoding='utf-8') as f:
     delete_list = f.readlines()
-    delete_list = [word.replace("\n", "").strip() for word in delete_list]
+    delete_list = [word.strip() for word in delete_list if word.strip()]
 
 
 def extract_regular_chars(text):
@@ -376,7 +476,7 @@ def replace_english_letters(text):
         'e': 'е',
         'f': 'ф',
         'g': 'г',
-        'h': 'н',
+        'h': 'х',
         'i': 'и',
         'j': 'й',
         'k': 'к',
@@ -389,11 +489,11 @@ def replace_english_letters(text):
         'r': 'р',
         's': 'с',
         't': 'т',
-        'u': 'у',
+        'u': 'и',
         'v': 'в',
         'w': 'в',
-        'x': 'х',
-        'y': 'й',
+        'x': 'x',
+        'y': 'y',
         'z': 'з'
     }
 
@@ -432,7 +532,6 @@ def check_bw(message):
         return False
 
     message_text = extract_regular_chars(message.lower())
-    message_text = message_text.replace('\n', ' ')
 
     flag = False
 
@@ -454,32 +553,7 @@ def count_ad_matches(text, ad_patterns):
 
 def check_ad(message):
     MATCH_THRESHOLD = 1
-    ad_patterns = [
-    re.compile(r'[iи]щ[уy] лю[dд][еёe]й для [dд][oо]п за[рp][aа][бb6][oо]тк[aа]', re.IGNORECASE),
-    re.compile(r'[нn]а [уy][dд]ал[еёe][нn][нn]ой о[cс][нn][оo][вb][еёe]', re.IGNORECASE),
-    re.compile(r'[вb] [cс][вb][oо][бb6][oо][dд][нn][oо][еёe] [вb][рp][еёe][мm]я', re.IGNORECASE),
-    re.compile(r'п[oо][dд][рp][оo][бb6][нn][oо][cс]т[iи] [вb] л[iи][ч4][нn]ы[еёe] [cс][oо][oо][бb6]щ[еёe][нn][iи]я', re.IGNORECASE),
-    re.compile(r'[уy][dд][aа]л[еёe][нn][нn][aа]я [рp][aа][бb6][oо]т[aа]', re.IGNORECASE),
-    re.compile(r'кт[oо] [iи]щ[еёe]т п[oо][dд][рp][aа][бb6][oо]тк[уy]', re.IGNORECASE),
-    re.compile(r'[рp][aа][b6б][oо]т[aаеe] [нn][aа] [dд][oо][мm][уy]', re.IGNORECASE),
-    re.compile(r'[dд]ля п[oо]л[уy][ч4][еёe][нn][iи]я [dд][oо]п(?:\.?\s*|[oо]л[нn][iи]т[еёe]ль[нn][oо]г[oо]\s+)[dд][oо]х[oо][dд][aа]', re.IGNORECASE),
-    re.compile(r'[iи]щ[уy] п[аa][рp]т[нn][ёеe][рp][оo][вb] [вb] к[оo][мm][аa][нn][дd][уy]', re.IGNORECASE),
-    re.compile(r'[сc] (?:т[еe]л[еe]ф[оo][нn][аa]|к[оo][мm]п[ьb]ю?т[еe][рp][аa])', re.IGNORECASE),
-    re.compile(r'[оo]т\s*1?[8\u0038\u0030\u03a3\u0417]\s*л[еe]т,?\s*[чч4][аa][сc]т[iи][чч4][нn][аa]я\s*з[аa][нn]ят[оo][сc]т[ьb]', re.IGNORECASE),
-    re.compile(r'х[оo][рp][оo]ш[иi]й\s*[дd][оo]п[оo]л[нn][иi]т[еe]л[ьb][нn]ый\s*з[аa][рp][аa][бb6][оo]т[оo]к', re.IGNORECASE),
-    re.compile(r'[рp][aа][бb6][oо]т[aа] [нn][aа] [уy][dд][aа]л[еёe][нn][кk][еёe]', re.IGNORECASE),
-    re.compile(r'[гg][иi][бb6][кk][иi]й [гg][рp][aа][фf][иi][кk]', re.IGNORECASE),
-    re.compile(r'[сc][вb][oо][бb6][oо][dд][нn]ый [гg][рp][aа][фf][иi][кk]', re.IGNORECASE),
-    re.compile(r'[dд][иi][сc]т[aа][нn]ц[иi][oо][нn][нn][aа]я [рp][aа][бb6][oо]т[aа]', re.IGNORECASE),
-    re.compile(r'[рp][aа][бb6][oо]т[aа] [иi]з [dд][oо][мm][aа]', re.IGNORECASE),
-    re.compile(r'[пn][оo][dд][рp][оo][бb6][нn][оo][сc]т[иi] [вb] л[иi][чч4][кk][уy]', re.IGNORECASE),
-    re.compile(r'[пn][оo][dд][рp][оo][бb6][нn][оo][сc]т[иi] [вb] л[cс]', re.IGNORECASE),
-    re.compile(r'[вb][сc][еeё] [dд][еeё]т[аa]л[иiu] [вb] л[сc]', re.IGNORECASE),
-    re.compile(r'[вb] п[оo][иiеu][сc]к[еe] лю[дd][еeё]й', re.IGNORECASE),
-    re.compile(r'з[аa][иiеu][нn]т[еe]р[еe][сc][оo][вb][аa][нn](?:[нn]ы[хйемe]?|[вb]ш[иiе][хйемe]?ся)? (?:[вb]|[нn][аa]) п[аa][сc][сc][иiеu][вb][нn](?:[оo]й|[уy]ю|[аa]я|[ыоo][хйемe]?) (?:пр[иiеu][бb6][ыу]л[ьb]?|[дd][оo]х[оo][дd])[иiеu]?', re.IGNORECASE),
-    re.compile(r'[сc] з[аa]т[pр][аa]т[оo]й [mм][иiеu][нn][иiеu][mм](?:[уy][mм]|[аa]ль[нn][оo]|[аa]ль[нn]ы[mм]) л[иiеu][чч4][нn][оo]г[оo] [вb][pр][еe][mм][еe][нn][иiеu]', re.IGNORECASE),
 
-    ]
     message = extract_regular_chars(message)
     match_count = count_ad_matches(message, ad_patterns)
 
@@ -521,6 +595,16 @@ async def notify_admins(message: types.Message, reason: str, message_text):
         admin_messages[message.message_id][admin] = sent_message.message_id
 
 
+@dp.message(F.new_chat_members)
+async def handle_channel_post(message: types.Message):
+    await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+
+
+@dp.message(F.left_chat_member)
+async def handle_channel_post1(message: types.Message):
+    await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+
+
 @dp.message()
 async def work(message: types.Message):
     global is_delete_bw, is_delete_ad
@@ -528,11 +612,12 @@ async def work(message: types.Message):
     text_to_check = message.text or message.caption
 
     if text_to_check:
+        text_to_check = " ".join(text_to_check.strip().split())
         if text_to_check in delete_list:
             try:
-                # Удаляем сообщение
                 await message.delete()
-                # Баним пользователя
+
+                # # Баним пользователя
                 # await bot.ban_chat_member(message.chat.id, message.from_user.id)
                 # print(f"Пользователь {message.from_user.id} забанен за сообщение из delete_list")
                 return
@@ -578,8 +663,10 @@ async def process_callback(callback_query: types.CallbackQuery):
             if message_text in bad_words or message_text in delete_list:
                 pass
             else:
-                with open("delete_list.txt", "a", encoding='utf-8') as f:
+                with open("txts/delete_list.txt", "a", encoding='utf-8') as f:
                     f.write("\n" + message_text)
+                delete_list.append(message_text)
+
             del message_texts[text_id]
 
             await callback_query.answer("Сообщение удалено.")
@@ -591,10 +678,10 @@ async def process_callback(callback_query: types.CallbackQuery):
 
             if action == 'mute':
                 await bot.restrict_chat_member(chat_id, user_id, types.ChatPermissions(can_send_messages=False))
-                await callback_query.answer("Пользователь замучен на 10 секунд.")
+                await callback_query.answer("Пользователь замучен на 300 секунд.")
 
-                # Запускаем задачу для автоматического размучивания через 10 секунд
-                asyncio.create_task(unmute_user(chat_id, user_id, 10))
+                # Запускаем задачу для автоматического размучивания через 300 секунд
+                asyncio.create_task(unmute_user(chat_id, user_id, 300))
             elif action == 'ban':
                 await bot.ban_chat_member(chat_id, user_id)
                 await callback_query.answer("Пользователь забанен.")
@@ -611,20 +698,6 @@ async def process_callback(callback_query: types.CallbackQuery):
             except Exception as e:
                 print(f"Не удалось удалить сообщение у админа {admin}: {str(e)}")
         del admin_messages[message_id]
-
-
-async def unmute_user(chat_id: int, user_id: int, delay: int):
-    await asyncio.sleep(delay)
-    try:
-        await bot.restrict_chat_member(chat_id, user_id, types.ChatPermissions(
-            can_send_messages=True,
-            can_send_media_messages=True,
-            can_send_other_messages=True,
-            can_add_web_page_previews=True
-        ))
-        print(f"Пользователь {user_id} был автоматически размучен в чате {chat_id}")
-    except Exception as e:
-        print(f"Не удалось размутить пользователя {user_id} в чате {chat_id}: {str(e)}")
 
 
 async def main(message='Бот запущен'):
