@@ -43,15 +43,18 @@ is_delete_bw = False
 async def set_commands(bot: Bot):
     commands = [
         BotCommand(command='start', description='Начало'),
+        BotCommand(command='help', description='Помощь'),
         BotCommand(command='mode', description='Изменить режим работы'),
         BotCommand(command='whitelist', description='Добавить слово в белый список'),
         BotCommand(command='blacklist', description='Добавить слово в черный список'),
-        BotCommand(command='pattern', description='Добавить паттерн рекламы'),
+        BotCommand(command='pattern', description='Добавить текст в список паттернов рекламы'),
         BotCommand(command='add_admin', description='Добавить админа'),
         BotCommand(command='remove_admin', description='Добавить убрать админа'),
         BotCommand(command='mute', description='Замутить пользователя'),
         BotCommand(command='unmute', description='Размутить пользователя'),
         BotCommand(command='ban', description='Забанить пользователя'),
+        BotCommand(command='get_id', description='узнать user_id пользователя'),
+        BotCommand(command='my_id', description='узнать свой user_id'),
         ]
     await bot.set_my_commands(commands, BotCommandScopeDefault())
 
@@ -62,8 +65,32 @@ async def start_bot(bot: Bot):
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    if message.from_user.id in adminsId:
-        await message.answer(text="Привет")
+    if message.from_user.id not in adminsId:
+        return
+    
+    await message.answer(text="Привет. Если хочешь узнать функционал бота напиши:\n/help")
+
+
+@dp.message(Command("help"))
+async def help(message: types.Message):
+    if message.from_user.id not in adminsId:
+        return
+    
+    text = "Команды:\n"
+    text += "/mode - изменить режим работы\n"
+    text += "/blacklist <плохое слово> - добавить слово в черный список\n"
+    text += "/whitelist <слово> - добавить слово в белый список\n"
+    text += "/pattern <паттерн рекламы> - добавить текст в список паттернов рекламы\n"
+    text += "/my_id - узнать свой user_id\n"
+
+    text += "\nКоманды, которые можно использовать ответом на сообщение пользователя:\n"
+    text += "/add_admin <user_id> - добавить пользователя в список админов\n"
+    text += "/remove_admin <user_id> - убрать админа из списка админов\n"
+    text += "/mute <user_id> - замутить пользователя\n"
+    text += "/ban <user_id> - забанить пользователя\n"
+    text += "/get_id - узнать user_id пользователя\n"
+    
+    await message.answer(text=text)
 
 
 @dp.message(Command("mode"))
@@ -75,7 +102,6 @@ async def change(message: types.Message):
 @dp.message(F.text, Command("add_admin"))
 async def add_to_admin_list(message: types.Message):
     if message.from_user.id not in adminsId:
-        await message.reply("У вас нет прав для выполнения этой команды.")
         return
 
     # Проверяем, является ли сообщение ответом на другое сообщение
@@ -113,7 +139,6 @@ async def add_to_admin_list(message: types.Message):
 @dp.message(F.text, Command("remove_admin"))
 async def remove_from_adminlist(message: types.Message):
     if message.from_user.id not in adminsId:
-        await message.reply("У вас нет прав для выполнения этой команды.")
         return
 
     # Проверяем, является ли сообщение ответом на другое сообщение
@@ -151,16 +176,17 @@ async def remove_from_adminlist(message: types.Message):
 
 @dp.message(F.text, Command("my_id"))
 async def my_id(message: types.Message):
+    if message.from_user.id not in adminsId:
+        return
+    
     await message.answer(f"Ваш ID:\n```{message.from_user.id}```", parse_mode="MarkdownV2")
-
-
-@dp.message(F.text, Command("chat_id"))
-async def chat_id(message: types.Message):
-    await message.answer(f"ID чата:\n```{message.chat.id}```", parse_mode="MarkdownV2")
 
 
 @dp.message(F.text, Command("get_id"))
 async def get_user_id(message: types.Message):
+    if message.from_user.id not in adminsId:
+        return
+    
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
         await message.reply(f"ID пользователя:\n```{user_id}```", parse_mode="MarkdownV2")
@@ -170,51 +196,53 @@ async def get_user_id(message: types.Message):
 
 @dp.message(F.text, Command("mute"))
 async def mute(message: types.Message, command: CommandObject):
-    if message.from_user.id in adminsId:
-        duration = 300  # Значение по умолчанию, если не указано
-        if command.args:
-            try:
-                duration = int(command.args)
-            except ValueError:
-                await message.reply("Неверный формат. Используйте: /mute <количество_секунд>")
-                return
-    
-        if message.reply_to_message:
-            user_id = message.reply_to_message.from_user.id
-            user = await message.bot.get_chat(user_id)
-            await bot.restrict_chat_member(message.chat.id, user_id, types.ChatPermissions(can_send_messages=False))
+    if message.from_user.id not in adminsId:
+        return
 
-            await message.answer(f"Пользователь @{user.username} замучен на {duration} секунд.")
-            # Запускаем задачу для автоматического размучивания через 300 секунд
-            asyncio.create_task(unmute_user(message.chat.id, user_id, duration))
-        else:
-            await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+    duration = 300  # Значение по умолчанию, если не указано
+    if command.args:
+        try:
+            duration = int(command.args)
+        except ValueError:
+            await message.reply("Неверный формат. Используйте: /mute <количество_секунд>")
+            return
+
+    if message.reply_to_message:
+        user_id = message.reply_to_message.from_user.id
+        user = await message.bot.get_chat(user_id)
+        await bot.restrict_chat_member(message.chat.id, user_id, types.ChatPermissions(can_send_messages=False))
+
+        await message.answer(f"Пользователь @{user.username} замучен на {duration} секунд.")
+        # Запускаем задачу для автоматического размучивания через 300 секунд
+        asyncio.create_task(unmute_user(message.chat.id, user_id, duration))
+    else:
+        await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
 
 
 @dp.message(F.text, Command("unmute"))
 async def unmute(message: types.Message):
-    if message.from_user.id in adminsId:
-        if message.reply_to_message:
-            user_id = message.reply_to_message.from_user.id
-            user = await message.bot.get_chat(user_id)
-            
-            # Снимаем ограничения с пользователя
-            await bot.restrict_chat_member(
-                message.chat.id, 
-                user_id, 
-                types.ChatPermissions(
-                    can_send_messages=True,
-                    can_send_media_messages=True,
-                    can_send_other_messages=True,
-                    can_add_web_page_previews=True
-                )
+    if message.from_user.id not in adminsId:
+        return
+    
+    if message.reply_to_message:
+        user_id = message.reply_to_message.from_user.id
+        user = await message.bot.get_chat(user_id)
+        
+        # Снимаем ограничения с пользователя
+        await bot.restrict_chat_member(
+            message.chat.id, 
+            user_id, 
+            types.ChatPermissions(
+                can_send_messages=True,
+                can_send_media_messages=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True
             )
-            
-            await message.answer(f"Пользователь @{user.username} размучен.")
-        else:
-            await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+        )
+        
+        await message.answer(f"Пользователь @{user.username} размучен.")
     else:
-        await message.reply("У вас нет прав для использования этой команды.")
+        await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
 
 
 async def unmute_user(chat_id: int, user_id: int, delay: int):
@@ -233,78 +261,82 @@ async def unmute_user(chat_id: int, user_id: int, delay: int):
 
 @dp.message(F.text, Command("ban"))
 async def ban(message: types.Message, command: CommandObject):
-    if message.from_user.id in adminsId:
-        reason = "причина не указана"
-        if command.args:
-            reason = command.args
+    if message.from_user.id not in adminsId:
+        return
 
-        if message.reply_to_message:
-            user_id = message.reply_to_message.from_user.id
-            user = await message.bot.get_chat(user_id)
+    reason = "не указана"
+    if command.args:
+        reason = command.args
+
+    if message.reply_to_message:
+        user_id = message.reply_to_message.from_user.id
+        user = await message.bot.get_chat(user_id)
+        
+        try:
+            # Баним пользователя
+            await bot.ban_chat_member(message.chat.id, user_id)
             
-            try:
-                # Баним пользователя
-                await bot.ban_chat_member(message.chat.id, user_id)
-                
-                # Отправляем сообщение о бане
-                await message.answer(f"Пользователь @{user.username} забанен.\nПричина: {reason}")
-            except Exception as e:
-                await message.reply(f"Не удалось забанить пользователя: {str(e)}")
-        else:
-            await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+            # Отправляем сообщение о бане
+            await message.answer(f"Пользователь @{user.username} забанен.\nПричина: {reason}")
+        except Exception as e:
+            await message.reply(f"Не удалось забанить пользователя: {str(e)}")
     else:
-        await message.reply("У вас нет прав для использования этой команды.")
+        await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
 
 
 @dp.message(F.text, Command("blacklist"))
 async def add_to_blacklist(message: types.Message):
-    if message.from_user.id in adminsId:
+    if message.from_user.id not in adminsId:
+        return
+        
     # Получаем слово после команды
-        message_text = message.text.split(maxsplit=1)
-        if len(message_text) < 2:
-            await message.reply("Пожалуйста, укажите плохое слово после команды /blacklist.")
-            return
-        word = message_text[1]
-        if word:
-            if word in bad_words:
-                await message.reply(f"Слово '{word}' уже есть в черном списке.")
-                await asyncio.sleep(0.1)
-            else:
-                bad_words.append(word)
-                # Добавляем слово в bad_words.txt
-                with open("txts/bad_words.txt", "a", encoding='utf-8') as f:
-                    f.write("\n" + word)
-                await message.reply(f"Слово '{word}' добавлено в черный список.")
-                await asyncio.sleep(0.1)
-        else:
-            await message.reply("Укажите слово для добавления в черный список.")
+    message_text = message.text.split(maxsplit=1)
+    if len(message_text) < 2:
+        await message.reply("Пожалуйста, укажите плохое слово после команды /blacklist.")
+        return
+    word = message_text[1]
+    if word:
+        if word in bad_words:
+            await message.reply(f"Слово '{word}' уже есть в черном списке.")
             await asyncio.sleep(0.1)
+        else:
+            bad_words.append(word)
+            # Добавляем слово в bad_words.txt
+            with open("txts/bad_words.txt", "a", encoding='utf-8') as f:
+                f.write("\n" + word)
+            await message.reply(f"Слово '{word}' добавлено в черный список.")
+            await asyncio.sleep(0.1)
+    else:
+        await message.reply("Укажите слово для добавления в черный список.")
+        await asyncio.sleep(0.1)
 
 
 @dp.message(F.text, Command("whitelist"))
 async def add_to_admin(message: types.Message):
-    if message.from_user.id in adminsId:
+    if message.from_user.id not in adminsId:
+        return
+    
     # Получаем слово после команды
-        message_text = message.text.split(maxsplit=1)
-        if len(message_text) < 2:
-            await message.reply("Пожалуйста, укажите слово после команды /whitelist.")
-            return
-        word = message_text[1]
+    message_text = message.text.split(maxsplit=1)
+    if len(message_text) < 2:
+        await message.reply("Пожалуйста, укажите слово после команды /whitelist.")
+        return
+    word = message_text[1]
 
-        if word:
-            if word in white_list:
-                await message.reply(f"Слово '{word}' уже есть в белом списке.")
-                await asyncio.sleep(0.1)
-            else:
-                white_list.append(word)
-                # Добавляем слово в white_list.txt
-                with open("txts/white_list.txt", "a", encoding='utf-8') as f:
-                    f.write("\n" + word)
-                await message.reply(f"Слово '{word}' добавлено в белый список.")
-                await asyncio.sleep(0.1)
-        else:
-            await message.reply("Укажите слово для добавления в белый список.")
+    if word:
+        if word in white_list:
+            await message.reply(f"Слово '{word}' уже есть в белом списке.")
             await asyncio.sleep(0.1)
+        else:
+            white_list.append(word)
+            # Добавляем слово в white_list.txt
+            with open("txts/white_list.txt", "a", encoding='utf-8') as f:
+                f.write("\n" + word)
+            await message.reply(f"Слово '{word}' добавлено в белый список.")
+            await asyncio.sleep(0.1)
+    else:
+        await message.reply("Укажите слово для добавления в белый список.")
+        await asyncio.sleep(0.1)
 
 
 def string_to_regex(input_string):
@@ -359,6 +391,9 @@ def string_to_regex(input_string):
 
 @dp.message(F.text, Command("pattern"))
 async def add_pattern(message: types.Message):
+    if message.from_user.id not in adminsId:
+        return
+    
     # Получаем текст после команды
     pattern_text = message.text.split(maxsplit=1)
     if len(pattern_text) < 2:
