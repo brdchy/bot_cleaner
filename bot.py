@@ -67,7 +67,7 @@ async def start_bot(bot: Bot):
 async def cmd_start(message: types.Message):
     if message.from_user.id not in adminsId:
         return
-    
+
     await message.answer(text="Привет. Если хочешь узнать функционал бота напиши:\n/help")
 
 
@@ -75,7 +75,7 @@ async def cmd_start(message: types.Message):
 async def help(message: types.Message):
     if message.from_user.id not in adminsId:
         return
-    
+
     text = "Команды:\n"
     text += "/mode - изменить режим работы, вам будет прислано сообщение с переключателями\n"
     text += "/blacklist <плохое слово> - добавить слово в черный список\n"
@@ -89,7 +89,7 @@ async def help(message: types.Message):
     text += "/mute <user_id> - замутить пользователя\n"
     text += "/ban <user_id> - забанить пользователя\n"
     text += "/get_id - узнать user_id пользователя\n"
-    
+
     await message.answer(text=text)
 
 
@@ -115,7 +115,7 @@ async def add_to_admin_list(message: types.Message):
         if not args:
             await message.reply("Использование: /add_admin <user_id> или ответьте на сообщение пользователя командой /add_admin")
             return
-        
+
         try:
             user_id = int(args[0])
             user = await message.bot.get_chat(user_id)
@@ -152,7 +152,7 @@ async def remove_from_adminlist(message: types.Message):
         if not args:
             await message.reply("Использование: /remove_admin <user_id> или ответьте на сообщение пользователя командой /remove_admin")
             return
-        
+
         try:
             user_id = int(args[0])
             user = await message.bot.get_chat(user_id)
@@ -178,7 +178,7 @@ async def remove_from_adminlist(message: types.Message):
 async def my_id(message: types.Message):
     if message.from_user.id not in adminsId:
         return
-    
+
     await message.answer(f"Ваш ID:\n```{message.from_user.id}```", parse_mode="MarkdownV2")
 
 
@@ -186,7 +186,7 @@ async def my_id(message: types.Message):
 async def get_user_id(message: types.Message):
     if message.from_user.id not in adminsId:
         return
-    
+
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
         await message.reply(f"ID пользователя:\n```{user_id}```", parse_mode="MarkdownV2")
@@ -223,15 +223,15 @@ async def mute(message: types.Message, command: CommandObject):
 async def unmute(message: types.Message):
     if message.from_user.id not in adminsId:
         return
-    
+
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
         user = await message.bot.get_chat(user_id)
-        
+
         # Снимаем ограничения с пользователя
         await bot.restrict_chat_member(
-            message.chat.id, 
-            user_id, 
+            message.chat.id,
+            user_id,
             types.ChatPermissions(
                 can_send_messages=True,
                 can_send_media_messages=True,
@@ -239,7 +239,7 @@ async def unmute(message: types.Message):
                 can_add_web_page_previews=True
             )
         )
-        
+
         await message.answer(f"Пользователь @{user.username} размучен.")
     else:
         await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
@@ -271,11 +271,11 @@ async def ban(message: types.Message, command: CommandObject):
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
         user = await message.bot.get_chat(user_id)
-        
+
         try:
             # Баним пользователя
             await bot.ban_chat_member(message.chat.id, user_id)
-            
+
             # Отправляем сообщение о бане
             await message.answer(f"Пользователь @{user.username} забанен.\nПричина: {reason}")
         except Exception as e:
@@ -288,7 +288,7 @@ async def ban(message: types.Message, command: CommandObject):
 async def add_to_blacklist(message: types.Message):
     if message.from_user.id not in adminsId:
         return
-        
+
     # Получаем слово после команды
     message_text = message.text.split(maxsplit=1)
     if len(message_text) < 2:
@@ -315,7 +315,7 @@ async def add_to_blacklist(message: types.Message):
 async def add_to_admin(message: types.Message):
     if message.from_user.id not in adminsId:
         return
-    
+
     # Получаем слово после команды
     message_text = message.text.split(maxsplit=1)
     if len(message_text) < 2:
@@ -384,7 +384,7 @@ def string_to_regex(input_string):
             result.append(letter_to_regex[char])
         else:
             result.append(re.escape(char))
-    
+
     regex_pattern = ''.join(result)
     return regex_pattern
 
@@ -393,7 +393,7 @@ def string_to_regex(input_string):
 async def add_pattern(message: types.Message):
     if message.from_user.id not in adminsId:
         return
-    
+
     # Получаем текст после команды
     pattern_text = message.text.split(maxsplit=1)
     if len(pattern_text) < 2:
@@ -406,18 +406,18 @@ async def add_pattern(message: types.Message):
     with open('txts/ad_patterns.csv', 'r', newline='', encoding='utf-8') as file:
         reader = csv.reader(file)
         existing_patterns = [row[0] for row in reader]
-    
+
     if regex_pattern in existing_patterns:
         await message.reply(f"Паттерн '{new_pattern}' уже существует в базе.")
         return
 
     compiled_pattern = re.compile(r'' + regex_pattern, re.IGNORECASE)
-   
+
     ad_patterns.append(compiled_pattern)
     with open('txts/ad_patterns.csv', 'a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         writer.writerow([regex_pattern])
-   
+
     await message.reply(f"Добавлен новый паттерн: {new_pattern}\nРегулярное выражение: {regex_pattern}")
 
 
