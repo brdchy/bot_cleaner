@@ -4,6 +4,8 @@ import html
 import re
 import uuid
 import csv
+from datetime import datetime, timedelta
+import os
 
 from aiogram.filters.command import Command, CommandObject
 from aiogram.types import BotCommand, BotCommandScopeDefault
@@ -41,6 +43,26 @@ is_delete_ad = False
 is_delete_bw = False
 
 
+file_exists = os.path.isfile('txts/admin_actions.csv')
+with open('txts/admin_actions.csv', 'a', newline='', encoding='utf-8') as file:
+    writer = csv.writer(file)
+    if not file_exists:
+        writer.writerow(['timestamp', 'user_id', 'username', 'action', 'details'])
+
+
+async def log_admin_action(user_id, action, details=''):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        user = await bot.get_chat_member(user_id, user_id)
+        username = user.user.username or "No username"
+    except:
+        username = "Unknown"
+    
+    with open('txts/admin_actions.csv', 'a', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow([timestamp, user_id, f"@{username}", action, details])
+
+
 async def set_commands(bot: Bot):
     commands = [
         BotCommand(command='start', description='Начало'),
@@ -59,6 +81,7 @@ async def set_commands(bot: Bot):
         BotCommand(command='ban', description='Забанить пользователя'),
         BotCommand(command='get_id', description='узнать user_id пользователя'),
         BotCommand(command='my_id', description='узнать свой user_id'),
+        BotCommand(command='admin_actions', description='Просмотр последних действий админов'),
         ]
     await bot.set_my_commands(commands, BotCommandScopeDefault())
 
@@ -89,6 +112,7 @@ async def help(message: types.Message):
     text += "/watch_patterns - посмотреть список паттернов\n"
     text += "/change_threshold - изменить порог количества паттернов в сообщении для идентификации его, как рекламы\n"
     text += "/my_id - узнать свой user_id\n"
+    text += "/admin_actions - просмотр последних действий админов\n"
 
     text += "\nКоманды, которые можно использовать ответом на сообщение пользователя:\n"
     text += "/add_admin <user_id> - добавить пользователя в список админов\n"
@@ -98,6 +122,33 @@ async def help(message: types.Message):
     text += "/get_id - узнать user_id пользователя\n"
 
     await message.answer(text=text)
+
+
+def load_admin_actions():
+    actions = []
+    if os.path.isfile('txts/admin_actions.csv'):
+        with open('txts/admin_actions.csv', 'r', newline='', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                actions.append(row)
+    return actions
+
+
+@dp.message(F.text, Command("admin_actions"))
+async def view_admin_actions(message: types.Message):
+    if message.from_user.id not in adminsId:
+        return
+
+    admin_actions = load_admin_actions()
+    
+    # Выберем последние 30 действий
+    last_actions = admin_actions[-30:]
+    
+    response = "Последние действия админов:\n\n"
+    for action in last_actions:
+        response += f"{action['timestamp']} - {action['username']} - {action['action']}: {action['details']}\n"
+
+    await message.reply(response)
 
 
 @dp.message(Command("mode"))
@@ -139,6 +190,7 @@ async def add_to_admin_list(message: types.Message):
         with open("txts/admins_list.txt", "a", encoding='utf-8') as f:
             f.write(f"\n{user_id}")
         await message.reply(f"Пользователь @{html.escape(username)} (ID: {user_id}) добавлен в список админов.")
+        await log_admin_action(message.from_user.id, "add_admin", f"Added admin: {user_id} (@{username})")
     else:
         await message.reply(f"Пользователь @{html.escape(username)} (ID: {user_id}) уже является админом.")
 
@@ -177,6 +229,7 @@ async def remove_from_adminlist(message: types.Message):
         with open("txts/admins_list.txt", "w", encoding='utf-8') as f:
             f.write("\n".join(map(str, adminsId)))
         await message.reply(f"Админ @{html.escape(username)} (ID: {user_id}) удален из списка админов.")
+        await log_admin_action(message.from_user.id, "remove_admin", f"Removed admin: {user_id} (@{username})")
     else:
         await message.reply(f"Пользователь @{html.escape(username)} (ID: {user_id}) не является админом.")
 
@@ -220,6 +273,7 @@ async def mute(message: types.Message, command: CommandObject):
         await bot.restrict_chat_member(message.chat.id, user_id, types.ChatPermissions(can_send_messages=False))
 
         await message.answer(f"Пользователь @{user.username} замучен на {duration} секунд.")
+        await log_admin_action(message.from_user.id, "mute", f"Muted user: {user_id} (@{user.username}) for {duration} seconds")
         # Запускаем задачу для автоматического размучивания через 300 секунд
         asyncio.create_task(unmute_user(message.chat.id, user_id, duration))
     else:
@@ -248,6 +302,7 @@ async def unmute(message: types.Message):
         )
 
         await message.answer(f"Пользователь @{user.username} размучен.")
+        await log_admin_action(message.from_user.id, "unmute", f"Unmuted user: {user_id} (@{user.username})")
     else:
         await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
 
@@ -285,6 +340,7 @@ async def ban(message: types.Message, command: CommandObject):
 
             # Отправляем сообщение о бане
             await message.answer(f"Пользователь @{user.username} забанен.\nПричина: {reason}")
+            log_admin_action(message.from_user.id, "ban", f"Banned user: {user_id} Reason: {reason}")
         except Exception as e:
             await message.reply(f"Не удалось забанить пользователя: {str(e)}")
     else:
@@ -312,6 +368,7 @@ async def add_to_blacklist(message: types.Message):
             with open("txts/bad_words.txt", "a", encoding='utf-8') as f:
                 f.write("\n" + word)
             await message.reply(f"Слово '{word}' добавлено в черный список.")
+            await log_admin_action(message.from_user.id, "add_to_blacklist", f"Added word: '{word}'")
             await asyncio.sleep(0.1)
     else:
         await message.reply("Укажите слово для добавления в черный список.")
@@ -340,6 +397,7 @@ async def add_to_admin(message: types.Message):
             with open("txts/white_list.txt", "a", encoding='utf-8') as f:
                 f.write("\n" + word)
             await message.reply(f"Слово '{word}' добавлено в белый список.")
+            await log_admin_action(message.from_user.id, "add_to_whitelist", f"Added word: '{word}'")
             await asyncio.sleep(0.1)
     else:
         await message.reply("Укажите слово для добавления в белый список.")
@@ -450,38 +508,36 @@ def string_to_regex(input_string):
 async def add_pattern(message: types.Message):
     if message.from_user.id not in adminsId:
         return
-    # Получаем текст после команды
+    
     pattern_text = message.text.split(maxsplit=1)
     if len(pattern_text) < 2:
         await message.reply("Пожалуйста, укажите текст паттерна рекламы после команды /add_pattern.")
         return
-    new_pattern = pattern_text[1]
-    new_pattern = " ".join(new_pattern.strip().split())
+    
+    new_pattern = " ".join(pattern_text[1].strip().split())
     regex_pattern = string_to_regex(new_pattern)
-
-    # Проверка на наличие паттерна в файле и проверка подстрок/суперстрок
+    
     with open('txts/ad_patterns.csv', 'r', newline='', encoding='utf-8') as file:
         reader = csv.reader(file)
         existing_patterns = [row[0] for row in reader if row]
-
+    
     if regex_pattern in existing_patterns:
         await message.reply(f"Паттерн '{new_pattern}' уже существует в базе.")
         return
-
-    # Проверка на подстроки и суперстроки
+    
     for existing_pattern in existing_patterns:
         if regex_pattern in existing_pattern or existing_pattern in regex_pattern:
-            pattern_id = str(uuid.uuid4())[:8]  # Используем первые 8 символов UUID
+            pattern_id = str(uuid.uuid4())[:8]
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="Да, добавить", callback_data=f"add:{pattern_id}")],
                 [InlineKeyboardButton(text="Нет, отменить", callback_data=f"cancel:{pattern_id}")]
             ])
             await message.reply("В базе существует похожий паттерн. Вы уверены, что хотите добавить новый паттерн?", reply_markup=keyboard)
-            # Сохраняем паттерн во временное хранилище
-            temp_patterns[pattern_id] = regex_pattern
+            temp_patterns[pattern_id] = (regex_pattern, new_pattern, message)
             return
-
+    
     await add_pattern_to_database(message, new_pattern, regex_pattern)
+    await log_admin_action(message.from_user.id, "add_pattern", f"Added pattern: '{new_pattern}'")
 
 
 user_data = {}
@@ -537,6 +593,7 @@ async def process_pattern_number(message: types.Message):
 
         pattern_to_delete = existing_patterns[pattern_number]
         await delete_pattern_from_database(message, pattern_to_delete)
+        await log_admin_action(user_id, "remove_pattern", f"Removed pattern: '{regex_to_readable(pattern_to_delete)}'")
 
         # Удаляем сообщение со списком паттернов
         try:
@@ -553,20 +610,23 @@ async def process_pattern_number(message: types.Message):
 @dp.callback_query(lambda c: c.data.startswith(('add:', 'cancel:')))
 async def process_pattern_callback(callback_query: types.CallbackQuery):
     action, pattern_id = callback_query.data.split(':', 1)
+    
+    if pattern_id not in temp_patterns:
+        await callback_query.answer("Ошибка: паттерн не найден.")
+        await callback_query.message.delete()
+        return
+
+    regex_pattern, new_pattern, original_message = temp_patterns[pattern_id]
 
     if action == 'add':
-        regex_pattern = temp_patterns.get(pattern_id)
-        if regex_pattern:
-            new_pattern = regex_pattern  # В этом случае new_pattern и regex_pattern одинаковы
-            await add_pattern_to_database(callback_query.message, new_pattern, regex_pattern)
-            del temp_patterns[pattern_id]  # Удаляем паттерн из временного хранилища
-        else:
-            await callback_query.message.edit_text("Ошибка: паттерн не найден.")
-    elif action == 'cancel':
-        await callback_query.message.edit_text("Добавление паттерна отменено.")
-        if pattern_id in temp_patterns:
-            del temp_patterns[pattern_id]  # Удаляем паттерн из временного хранилища
+        await add_pattern_to_database(original_message, new_pattern, regex_pattern)
+        await log_admin_action(callback_query.from_user.id, "add_pattern", f"Added pattern: '{new_pattern}'")
+    else:  # cancel
+        await log_admin_action(callback_query.from_user.id, "cancel_add_pattern", f"Cancelled adding pattern: '{new_pattern}'")
+        await original_message.reply("Добавление паттерна отменено.")
 
+    del temp_patterns[pattern_id]
+    await callback_query.message.delete()
     await callback_query.answer()
 
 
@@ -675,11 +735,13 @@ async def toggle_delete(callback: CallbackQuery):
         state = "activated" if is_delete_bw else "deactivated"
 
         await callback.answer(text=f'Auto delete bad words {state}')
+        await log_admin_action(callback.from_user.id, "toggle_delete_bw", f"Auto delete bad words {state}")
     elif feature == "ad":
         is_delete_ad = not is_delete_ad
         state = "activated" if is_delete_ad else "deactivated"
 
         await callback.answer(text=f'Auto delete ad {state}')
+        await log_admin_action(callback.from_user.id, "toggle_delete_ad", f"Auto delete ad {state}")
 
     # Обновляем сообщение с новым состоянием кнопок
     buttons = InlineKeyboardBuilder()
@@ -842,6 +904,7 @@ async def process_callback(callback_query: types.CallbackQuery):
     global MATCH_THRESHOLD
     
     try:
+        old_threshold = MATCH_THRESHOLD
         if callback_query.data == 'decrease':
             MATCH_THRESHOLD = max(1, MATCH_THRESHOLD - 1)  # Не позволяем значению стать отрицательным
         elif callback_query.data == 'increase':
@@ -852,6 +915,8 @@ async def process_callback(callback_query: types.CallbackQuery):
             text="Текущее значение порога совпадений",
             reply_markup=get_threshold_keyboard()
         )
+
+        await log_admin_action(callback_query.from_user.id, "change_threshold", f"Changed from {old_threshold} to {MATCH_THRESHOLD}")
     except:
         pass
 
@@ -945,6 +1010,11 @@ async def process_callback(callback_query: types.CallbackQuery):
     if action != 'skip':
         try:
             await bot.delete_message(chat_id, message_id)
+
+            text_id = params[2]
+            message_text = message_texts.get(text_id, "")
+
+            await log_admin_action(callback_query.from_user.id, "delete_message", f"Deleted message: '{message_text}'")
         except Exception as e:
             await callback_query.message.answer(f"Не удалось удалить исходное сообщение: {str(e)}", show_alert=True)
 
@@ -972,14 +1042,20 @@ async def process_callback(callback_query: types.CallbackQuery):
             if action == 'mute':
                 await bot.restrict_chat_member(chat_id, user_id, types.ChatPermissions(can_send_messages=False))
                 await callback_query.answer("Пользователь замучен на 300 секунд.")
+                await log_admin_action(callback_query.from_user.id, "mute_user", f"Muted user: {user_id}")
 
                 # Запускаем задачу для автоматического размучивания через 300 секунд
                 asyncio.create_task(unmute_user(chat_id, user_id, 300))
             elif action == 'ban':
                 await bot.ban_chat_member(chat_id, user_id)
                 await callback_query.answer("Пользователь забанен.")
+                await log_admin_action(callback_query.from_user.id, "ban_user", f"Banned user: {user_id}")
         elif action == 'skip':
+            text_id = params[2]
+            message_text = message_texts.get(text_id, "")
+
             await callback_query.answer("Сообщение пропущено.")
+            await log_admin_action(callback_query.from_user.id, "skip_message", f"Skipped message: '{message_text}'")
     except Exception as e:
         await callback_query.message.answer(f"Не удалось выполнить действие: {str(e)}", show_alert=True)
 
@@ -993,12 +1069,51 @@ async def process_callback(callback_query: types.CallbackQuery):
         del admin_messages[message_id]
 
 
+async def delete_old_records():
+    current_time = datetime.now()
+    one_day_ago = current_time - timedelta(days=1)
+    
+    try:
+        # Читаем все записи в память
+        with open('txts/admin_actions.csv', 'r', newline='', encoding='utf-8') as file:
+            reader = csv.reader(file)
+            all_rows = list(reader)
+        
+        # Отделяем заголовок
+        header = all_rows[0]
+        data_rows = all_rows[1:]
+        
+        # Фильтруем записи
+        filtered_rows = [row for row in data_rows if datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S") > one_day_ago]
+        
+        # Перезаписываем файл с отфильтрованными данными
+        with open('txts/admin_actions.csv', 'w', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file)
+            writer.writerow(header)
+            writer.writerows(filtered_rows)
+        
+        print(f"Old records deleted at {current_time}")
+    except Exception as e:
+        print(f"Error during deleting old records: {e}")
+
+
+async def schedule_delete_old_records():
+    while True:
+        await delete_old_records()
+        # Ждем 24 часа перед следующим выполнением
+        await asyncio.sleep(24 * 60 * 60)
+
+
 async def main(message='Бот запущен'):
     for admin in adminsId:
         await bot.send_message(chat_id=admin, text=message)
         await send_control_message(message, admin)
 
     dp.startup.register(start_bot)
+
+    # Запускаем задачу удаления старых записей в отдельной корутине
+    asyncio.create_task(schedule_delete_old_records())
+
     await dp.start_polling(bot)
 
 
