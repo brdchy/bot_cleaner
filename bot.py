@@ -51,8 +51,8 @@ async def set_commands(bot: Bot):
         BotCommand(command='add_pattern', description='Добавить текст в список паттернов рекламы'),
         BotCommand(command='remove_pattern', description='Удалить паттерн рекламы из списка'),
         BotCommand(command='watch_patterns', description='Посмотреть список паттернов'),
-        BotCommand(command='add_admin', description='Добавить админа'),
-        BotCommand(command='remove_admin', description='Добавить убрать админа'),
+        BotCommand(command='add_admin', description='Добавить пользователя в список админов'),
+        BotCommand(command='remove_admin', description='Убрать админа из списка админов'),
         BotCommand(command='mute', description='Замутить пользователя'),
         BotCommand(command='unmute', description='Размутить пользователя'),
         BotCommand(command='ban', description='Забанить пользователя'),
@@ -136,7 +136,7 @@ async def add_to_admin_list(message: types.Message):
         adminsId.append(user_id)
         with open("txts/admins_list.txt", "a", encoding='utf-8') as f:
             f.write(f"\n{user_id}")
-        await message.reply(f"Админ @{html.escape(username)} (ID: {user_id}) добавлен в админлист.")
+        await message.reply(f"Пользователь @{html.escape(username)} (ID: {user_id}) добавлен в список админов.")
     else:
         await message.reply(f"Пользователь @{html.escape(username)} (ID: {user_id}) уже является админом.")
 
@@ -174,7 +174,7 @@ async def remove_from_adminlist(message: types.Message):
         # Обновляем файл admins_list.txt
         with open("txts/admins_list.txt", "w", encoding='utf-8') as f:
             f.write("\n".join(map(str, adminsId)))
-        await message.reply(f"Админ @{html.escape(username)} (ID: {user_id}) удален из админлиста.")
+        await message.reply(f"Админ @{html.escape(username)} (ID: {user_id}) удален из списка админов.")
     else:
         await message.reply(f"Пользователь @{html.escape(username)} (ID: {user_id}) не является админом.")
 
@@ -498,19 +498,24 @@ async def remove_pattern(message: types.Message):
    
     # Отправляем список паттернов
     patterns_list = "\n".join([f"{i+1}. {regex_to_readable(pattern)}" for i, pattern in enumerate(existing_patterns)])
-    await message.reply(f"Список паттернов:\n\n{patterns_list}\n\nВведите номер паттерна, который вы хотите удалить:")
+    sent_message = await message.reply(f"Список паттернов:\n\n{patterns_list}\n\nВведите номер паттерна, который вы хотите удалить:")
    
     # Сохраняем patterns в словаре user_data и устанавливаем таймер
     user_data[message.from_user.id] = {
         'existing_patterns': existing_patterns,
         'waiting_for_pattern_number': True,
-        'timer': asyncio.create_task(clear_user_data(message.from_user.id, 60))  # 60 секунд таймер
+        'timer': asyncio.create_task(clear_user_data(message.from_user.id, 5, sent_message)),  # 60 секунд таймер
+        'sent_message': sent_message
     }
     
 
-async def clear_user_data(user_id: int, delay: int):
+async def clear_user_data(user_id: int, delay: int, sent_message: types.Message):
     await asyncio.sleep(delay)
     if user_id in user_data:
+        try:
+            await sent_message.delete()
+        except:
+            pass  # Игнорируем ошибки при удалении сообщения
         del user_data[user_id]
 
 
@@ -526,10 +531,16 @@ async def process_pattern_number(message: types.Message):
     if 0 <= pattern_number < len(existing_patterns):
         # Отменяем таймер перед удалением паттерна
         user_data[user_id]['timer'].cancel()
-        
+       
         pattern_to_delete = existing_patterns[pattern_number]
         await delete_pattern_from_database(message, pattern_to_delete)
-        
+       
+        # Удаляем сообщение со списком паттернов
+        try:
+            await user_data[user_id]['sent_message'].delete()
+        except:
+            pass  # Игнорируем ошибки при удалении сообщения
+       
         # Очищаем данные пользователя после успешной обработки
         del user_data[user_id]
     else:
