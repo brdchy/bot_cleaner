@@ -51,6 +51,7 @@ async def set_commands(bot: Bot):
         BotCommand(command='add_pattern', description='Добавить текст в список паттернов рекламы'),
         BotCommand(command='remove_pattern', description='Удалить паттерн рекламы из списка'),
         BotCommand(command='watch_patterns', description='Посмотреть список паттернов'),
+        BotCommand(command='change_threshold', description='Изменить порог совпадений'),
         BotCommand(command='add_admin', description='Добавить пользователя в список админов'),
         BotCommand(command='remove_admin', description='Убрать админа из списка админов'),
         BotCommand(command='mute', description='Замутить пользователя'),
@@ -86,6 +87,7 @@ async def help(message: types.Message):
     text += "/add_pattern <паттерн рекламы> - добавить текст в список паттернов рекламы\n"
     text += "/remove_pattern - удалить паттерн рекламы из списка. Вам будет выведен список паттернов, нужно в течение минуты указать номер, который надо удалить\n"
     text += "/watch_patterns - посмотреть список паттернов\n"
+    text += "/change_threshold - изменить порог количества паттернов в сообщении для идентификации его, как рекламы\n"
     text += "/my_id - узнать свой user_id\n"
 
     text += "\nКоманды, которые можно использовать ответом на сообщение пользователя:\n"
@@ -348,21 +350,21 @@ async def add_to_admin(message: types.Message):
 async def watch_patterns(message: types.Message):
     if message.from_user.id not in adminsId:
         return
-    
+
     with open('txts/ad_patterns.csv', 'r', newline='', encoding='utf-8') as file:
         reader = csv.reader(file)
         patterns = [row[0] for row in reader if row and row[0].strip()]
-    
+
     if not patterns:
         await message.reply("Список паттернов пуст.")
         return
-    
+
     readable_patterns = [f"{i+1}. {regex_to_readable(pattern)}" for i, pattern in enumerate(patterns)]
-    
+
     # Разбиваем список на части по 50 паттернов
     chunk_size = 100
     pattern_chunks = [readable_patterns[i:i + chunk_size] for i in range(0, len(readable_patterns), chunk_size)]
-    
+
     for chunk in pattern_chunks:
         patterns_text = "\n".join(chunk)
         await message.reply(f"Текущие паттерны:\n\n{patterns_text}")
@@ -456,16 +458,16 @@ async def add_pattern(message: types.Message):
     new_pattern = pattern_text[1]
     new_pattern = " ".join(new_pattern.strip().split())
     regex_pattern = string_to_regex(new_pattern)
-   
+
     # Проверка на наличие паттерна в файле и проверка подстрок/суперстрок
     with open('txts/ad_patterns.csv', 'r', newline='', encoding='utf-8') as file:
         reader = csv.reader(file)
         existing_patterns = [row[0] for row in reader if row]
-   
+
     if regex_pattern in existing_patterns:
         await message.reply(f"Паттерн '{new_pattern}' уже существует в базе.")
         return
-   
+
     # Проверка на подстроки и суперстроки
     for existing_pattern in existing_patterns:
         if regex_pattern in existing_pattern or existing_pattern in regex_pattern:
@@ -487,20 +489,20 @@ user_data = {}
 async def remove_pattern(message: types.Message):
     if message.from_user.id not in adminsId:
         return
-   
+
     # Читаем существующие паттерны
     with open('txts/ad_patterns.csv', 'r', newline='', encoding='utf-8') as file:
         reader = csv.reader(file)
         existing_patterns = [row[0] for row in reader if row and row[0].strip()]
-   
+
     if not existing_patterns:
         await message.reply("Список паттернов пуст.")
         return
-   
+
     # Отправляем список паттернов
     patterns_list = "\n".join([f"{i+1}. {regex_to_readable(pattern)}" for i, pattern in enumerate(existing_patterns)])
     sent_message = await message.reply(f"Список паттернов:\n\n{patterns_list}\n\nВведите номер паттерна, который вы хотите удалить:")
-   
+
     # Сохраняем patterns в словаре user_data и устанавливаем таймер
     user_data[message.from_user.id] = {
         'existing_patterns': existing_patterns,
@@ -508,7 +510,7 @@ async def remove_pattern(message: types.Message):
         'timer': asyncio.create_task(clear_user_data(message.from_user.id, 60, sent_message)),  # 60 секунд таймер
         'sent_message': sent_message
     }
-    
+
 
 async def clear_user_data(user_id: int, delay: int, sent_message: types.Message):
     await asyncio.sleep(delay)
@@ -525,23 +527,23 @@ async def process_pattern_number(message: types.Message):
     user_id = message.from_user.id
     if user_id not in user_data or not user_data[user_id].get('waiting_for_pattern_number'):
         return
-   
+
     existing_patterns = user_data[user_id]['existing_patterns']
     pattern_number = int(message.text) - 1
-   
+
     if 0 <= pattern_number < len(existing_patterns):
         # Отменяем таймер перед удалением паттерна
         user_data[user_id]['timer'].cancel()
-       
+
         pattern_to_delete = existing_patterns[pattern_number]
         await delete_pattern_from_database(message, pattern_to_delete)
-       
+
         # Удаляем сообщение со списком паттернов
         try:
             await user_data[user_id]['sent_message'].delete()
         except:
             pass  # Игнорируем ошибки при удалении сообщения
-       
+
         # Очищаем данные пользователя после успешной обработки
         del user_data[user_id]
     else:
@@ -551,7 +553,7 @@ async def process_pattern_number(message: types.Message):
 @dp.callback_query(lambda c: c.data.startswith(('add:', 'cancel:')))
 async def process_pattern_callback(callback_query: types.CallbackQuery):
     action, pattern_id = callback_query.data.split(':', 1)
-    
+
     if action == 'add':
         regex_pattern = temp_patterns.get(pattern_id)
         if regex_pattern:
@@ -564,7 +566,7 @@ async def process_pattern_callback(callback_query: types.CallbackQuery):
         await callback_query.message.edit_text("Добавление паттерна отменено.")
         if pattern_id in temp_patterns:
             del temp_patterns[pattern_id]  # Удаляем паттерн из временного хранилища
-    
+
     await callback_query.answer()
 
 
@@ -582,61 +584,61 @@ async def delete_pattern_from_database(message: types.Message, pattern_to_delete
     with open('txts/ad_patterns.csv', 'r', newline='', encoding='utf-8') as file:
         reader = csv.reader(file)
         patterns = list(reader)
-    
+
     # Удаляем нужный паттерн
     patterns = [pattern for pattern in patterns if pattern[0] != pattern_to_delete]
-    
+
     # Записываем обновленный список обратно в файл
     with open('txts/ad_patterns.csv', 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         writer.writerows(patterns)
-    
+
     # Обновляем глобальный список скомпилированных паттернов
     global ad_patterns
     ad_patterns = [re.compile(r'' + pattern[0], re.IGNORECASE) for pattern in patterns]
-    
+
     await message.reply(f"Паттерн '{regex_to_readable(pattern_to_delete)}' успешно удален.")
 
 
 def regex_to_readable(regex_pattern):
     readable_dict = {
-        '[aа@]': 'а', 
-        '[bб6]': 'б', 
-        '[вbv]': 'в', 
-        '[гr]': 'г', 
+        '[aа@]': 'а',
+        '[bб6]': 'б',
+        '[вbv]': 'в',
+        '[гr]': 'г',
         '[дd]': 'д',
-        '[eе3]': 'е', 
-        '[ёeе]': 'ё', 
-        '[жg]': 'ж', 
-        '[зz3э]': 'з', 
+        '[eе3]': 'е',
+        '[ёeе]': 'ё',
+        '[жg]': 'ж',
+        '[зz3э]': 'з',
         '[иeеu]': 'и',
-        '[йuи]': 'й', 
-        '[кk]': 'к', 
-        '[лl]': 'л', 
-        '[мm]': 'м', 
+        '[йuи]': 'й',
+        '[кk]': 'к',
+        '[лl]': 'л',
+        '[мm]': 'м',
         '[пnh]': 'п',
         '[н]': 'н',
-        '[оo0]': 'о', 
-        '[pр]': 'р', 
-        '[cс]': 'с', 
-        '[тt]': 'т', 
+        '[оo0]': 'о',
+        '[pр]': 'р',
+        '[cс]': 'с',
+        '[тt]': 'т',
         '[уy]': 'у',
-        '[ф]': 'ф', 
-        '[xх]': 'х', 
-        '[ц]': 'ц', 
-        '[ч4]': 'ч', 
+        '[ф]': 'ф',
+        '[xх]': 'х',
+        '[ц]': 'ц',
+        '[ч4]': 'ч',
         '[шwщ]': 'ш',
-        '[ъ]': 'ъ', 
-        '[ы]': 'ы', 
-        '[ь]': 'ь', 
-        '[ю]': 'ю', 
+        '[ъ]': 'ъ',
+        '[ы]': 'ы',
+        '[ь]': 'ь',
+        '[ю]': 'ю',
         '[я]': 'я',
         r'\s*': ' '
     }
-    
+
     for regex, char in readable_dict.items():
         regex_pattern = regex_pattern.replace(regex, char)
-    
+
     return regex_pattern
 
 
@@ -805,8 +807,8 @@ def count_ad_matches(text, ad_patterns):
     return sum(1 for pattern in ad_patterns if pattern.search(text))
 
 
+MATCH_THRESHOLD = 1
 def check_ad(message):
-    MATCH_THRESHOLD = 1
 
     message = extract_regular_chars(message.lower())
     match_count = count_ad_matches(message, ad_patterns)
@@ -815,6 +817,43 @@ def check_ad(message):
         return True
 
     return False
+
+
+def get_threshold_keyboard():
+    buttons = [
+        [
+            InlineKeyboardButton(text="-1", callback_data="decrease"),
+            InlineKeyboardButton(text=f"{MATCH_THRESHOLD}", callback_data="current"),
+            InlineKeyboardButton(text="+1", callback_data="increase")
+        ]
+    ]
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
+
+
+@dp.message(F.text, Command("change_threshold"))
+async def threshold_command(message: types.Message):
+    await message.answer("Текущее значение порога совпадений",
+                         reply_markup=get_threshold_keyboard())
+
+
+@dp.callback_query(lambda c: c.data in ['decrease', 'current', 'increase'])
+async def process_callback(callback_query: types.CallbackQuery):
+    global MATCH_THRESHOLD
+    
+    try:
+        if callback_query.data == 'decrease':
+            MATCH_THRESHOLD = max(1, MATCH_THRESHOLD - 1)  # Не позволяем значению стать отрицательным
+        elif callback_query.data == 'increase':
+            MATCH_THRESHOLD += 1
+    
+        await callback_query.answer()
+        await callback_query.message.edit_text(
+            text="Текущее значение порога совпадений",
+            reply_markup=get_threshold_keyboard()
+        )
+    except:
+        pass
 
 
 message_texts = {}
