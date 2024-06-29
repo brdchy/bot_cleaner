@@ -436,9 +436,10 @@ def string_to_regex(input_string):
             result.append(r'\s*')
         elif char in letter_to_regex:
             result.append(letter_to_regex[char])
+        elif char == '.':
+            result.append('.')  # Добавляем точку без экранирования
         else:
             result.append(re.escape(char))
-
     regex_pattern = ''.join(result)
     return regex_pattern
 
@@ -504,7 +505,7 @@ async def remove_pattern(message: types.Message):
     user_data[message.from_user.id] = {
         'existing_patterns': existing_patterns,
         'waiting_for_pattern_number': True,
-        'timer': asyncio.create_task(clear_user_data(message.from_user.id, 5, sent_message)),  # 60 секунд таймер
+        'timer': asyncio.create_task(clear_user_data(message.from_user.id, 60, sent_message)),  # 60 секунд таймер
         'sent_message': sent_message
     }
     
@@ -807,7 +808,7 @@ def count_ad_matches(text, ad_patterns):
 def check_ad(message):
     MATCH_THRESHOLD = 1
 
-    message = extract_regular_chars(message)
+    message = extract_regular_chars(message.lower())
     match_count = count_ad_matches(message, ad_patterns)
 
     if match_count >= MATCH_THRESHOLD:
