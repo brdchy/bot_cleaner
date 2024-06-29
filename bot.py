@@ -731,7 +731,7 @@ def replace_english_letters(text):
         'g': 'г',
         'h': 'х',
         'i': 'и',
-        'j': 'й',
+        'j': 'ж',
         'k': 'к',
         'l': 'л',
         'm': 'м',
@@ -745,8 +745,8 @@ def replace_english_letters(text):
         'u': 'и',
         'v': 'в',
         'w': 'ш',
-        'x': 'x',
-        'y': 'y',
+        'x': 'х',
+        'y': 'у',
         'z': 'з'
     }
 
