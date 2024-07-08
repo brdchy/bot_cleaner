@@ -1,0 +1,7 @@
+version: '3.4'
+services:
+   app:
+     image: clearbot:1.2
+     restart: always
+     volumes: 
+      - ./txts:/app/txts
