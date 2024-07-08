@@ -1025,8 +1025,11 @@ async def schedule_delete_old_records():
 async def main(message='Бот запущен'):
     load_data()
     for admin in adminsId:
-        await bot.send_message(chat_id=admin, text=message)
-        await send_control_message(message, admin)
+        try:
+            await bot.send_message(chat_id=admin, text=message)
+            await send_control_message(message, admin)
+        except:
+            pass    
 
     dp.startup.register(start_bot)
     asyncio.create_task(schedule_delete_old_records())
