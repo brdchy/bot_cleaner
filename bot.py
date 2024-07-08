@@ -876,8 +876,8 @@ def check_bw(message):
 
 def check_ad(message):
     message = extract_regular_chars(message.lower())
-    print(f'\n{message}\n')
-    print(f'Количество совпадений: {count_ad_matches(message)}')
+    # print(f'\n{message}\n')
+    # print(f'Количество совпадений: {count_ad_matches(message)}')
     return count_ad_matches(message) >= MATCH_THRESHOLD
 
 
