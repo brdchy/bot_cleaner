@@ -32,10 +32,12 @@ MESSAGE_TIMEOUT = 60  # seconds
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot=bot)
+
 admin_messages = {}
 temp_patterns = {}
 user_data = {}
 message_texts = {}
+
 is_delete_ad = False
 is_delete_bw = False
 adminsId = []
@@ -593,6 +595,7 @@ async def add_pattern(message: types.Message):
         return
 
     new_pattern = " ".join(pattern_text[1].strip().split())
+    new_pattern = extract_regular_chars(new_pattern)
     regex_pattern = string_to_regex(new_pattern)
 
     with open(AD_PATTERNS_FILE, 'r', newline='', encoding='utf-8') as file:
@@ -873,6 +876,8 @@ def check_bw(message):
 
 def check_ad(message):
     message = extract_regular_chars(message.lower())
+    print(f'\n{message}\n')
+    print(f'Количество совпадений: {count_ad_matches(message)}')
     return count_ad_matches(message) >= MATCH_THRESHOLD
 
 
