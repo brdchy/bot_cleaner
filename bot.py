@@ -25,10 +25,6 @@ BAD_WORDS_FILE = 'txts/bad_words.txt'
 WHITE_LIST_FILE = 'txts/white_list.txt'
 DELETE_LIST_FILE = 'txts/delete_list.txt'
 ADMIN_ACTIONS_FILE = 'txts/admin_actions.csv'
-
-RUSSIAN_DICTIONARY = 'txts/russian.txt'
-NEW_METHOD_TEST_CSV = 'txts/NEW_METHOD_TEST_CSV.csv'
-
 MATCH_THRESHOLD = 1
 MESSAGE_TIMEOUT = 60  # seconds
 
@@ -105,9 +101,6 @@ def load_data():
     except Exception as e:
         print(f"Ошибка при загрузке {AD_PATTERNS_FILE}: {e}")
         ad_patterns = []
-
-    with open(RUSSIAN_DICTIONARY, 'r', encoding='cp1251') as file:
-        russian_words_set = set(word.strip().lower() for word in file)
 
 
 # --- Утилиты ---
@@ -840,56 +833,6 @@ async def process_callback0(callback_query: types.CallbackQuery):
         pass
 
 
-@dp.message(Command("watch_csv"))
-async def show_bad_words(message: types.Message):
-    if message.from_user.id not in adminsId:
-        return
-
-    try:
-        with open(NEW_METHOD_TEST_CSV, 'r', newline='', encoding='utf-8') as file:
-            reader = csv.reader(file)
-            data = list(reader)
-
-        if not data:
-            await message.reply("CSV файл пуст.")
-            return
-
-        # Формируем сообщение с данными
-        response = "Данные из CSV файла:\n\n"
-        for row in data:
-            if len(row) == 3:  # Проверяем, что в строке 3 элемента
-                timestamp, original_message, detected_word = row
-                response += f"Время: {timestamp}\n"
-                response += f"Сообщение: {original_message}\n"
-                response += f"Обнаруженное слово: {detected_word}\n\n"
-
-        # Разбиваем сообщение на части, если оно слишком длинное
-        max_message_length = 4096
-        for i in range(0, len(response), max_message_length):
-            chunk = response[i:i+max_message_length]
-            await message.reply(chunk)
-
-    except FileNotFoundError:
-        await message.reply(f"Файл {NEW_METHOD_TEST_CSV} не найден.")
-    except Exception as e:
-        await message.reply(f"Произошла ошибка при чтении файла: {str(e)}")
-
-
-@dp.message(Command("clear_csv"))
-async def clear_test_data(message: types.Message):
-    if message.from_user.id not in adminsId:
-        return
-
-    try:
-        # Полная очистка файла
-        open(NEW_METHOD_TEST_CSV, 'w').close()  # Просто очищаем файл
-
-        await message.reply("Все данные теста нового метода были успешно удалены.")
-        await log_admin_action(message.from_user.id, "clear_test_data", "Cleared all test data from NEW_METHOD_TEST_CSV")
-    except Exception as e:
-        await message.reply(f"Произошла ошибка при очистке данных: {str(e)}")
-
-
 # --- Обработчики сообщений ---
 @dp.message()
 async def work(message: types.Message):
@@ -938,57 +881,7 @@ def check_bw(message):
         if is_bad_word(bad_words, normalized_word):
             found_words.add(word)
 
-    # # Проверка текста без пробелов
-    # flag = False
-    # message_text_no_spaces = message_text.replace(" ", "")
-    # for word in words:
-    #     normalized_word = replace_english_letters(word)
-    #     if is_bad_word(bad_words, normalized_word):
-    #         pass
-    #     else:
-    #         for bad_word in bad_words:
-    #             if bad_word in replace_english_letters(message_text_no_spaces):
-    #                 print(f"Подозрительное слово: '{bad_word}'")
-    #                 if is_likely_bad_word(message_text_no_spaces, bad_word):
-    #                     log_bad_word_detection(message, bad_word)
-    #                     flag = True
-    #                     break
-    #         if flag is True:
-    #             break
-
     return list(found_words)
-
-
-def is_likely_bad_word(text: str, bad_word: str):
-    start = 0
-    while True:
-        start = text.find(bad_word, start)
-        if start == -1:
-            return False
-
-        end = start + len(bad_word)
-
-        before = text[max(0, start-5):start]
-        after = text[end:min(len(text), end+5)]
-
-        if not is_valid_word(before + bad_word + after):
-            return True
-
-        start = end
-
-
-def is_valid_word(word):
-    # Проверка на наличие в словаре
-    if word in russian_words_set:
-        print(f"Известное слово: '{word}'")
-        return True
-
-    # Проверка на схожесть с известными словами
-    for known_word in russian_words_set:
-        if fuzz.ratio(word, known_word) > 90:
-            print(f"Известное слово: '{known_word}'")
-            return True
-    return False
 
 
 def check_ad(message):
@@ -1121,15 +1014,6 @@ async def log_admin_action(user_id, action, details=''):
     with open(ADMIN_ACTIONS_FILE, 'a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow([timestamp, user_id, f"@{username}", action, details])
-
-
-def log_bad_word_detection(original_message, detected_word):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    with open(NEW_METHOD_TEST_CSV, 'a', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-        writer.writerow([timestamp, original_message, detected_word])
-        file.write('\n')  # Добавляем дополнительный перенос строки
 
 
 async def delete_old_records():
