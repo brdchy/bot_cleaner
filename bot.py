@@ -12,6 +12,7 @@ from aiogram.types import BotCommand, BotCommandScopeDefault
 from aiogram import F, Bot, Dispatcher, types
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.exceptions import TelegramBadRequest
 
 from rapidfuzz import fuzz
 from difflib import SequenceMatcher
@@ -282,6 +283,7 @@ async def set_commands(bot: Bot):
         BotCommand(command='get_id', description='узнать user_id пользователя'),
         BotCommand(command='my_id', description='узнать свой user_id'),
         BotCommand(command='admin_actions', description='Просмотр последних действий админов'),
+        BotCommand(command='report', description='Отправить репорт админам'),
     ]
     await bot.set_my_commands(commands, BotCommandScopeDefault())
 
@@ -318,7 +320,8 @@ async def help(message: types.Message):
             "/mute - замутить пользователя\n"
             "/unmute - размутить пользователя\n"
             "/ban <user_id> - забанить пользователя\n"
-            "/get_id - узнать user_id пользователя\n")
+            "/get_id - узнать user_id пользователя\n"
+            "/report - отправить репорт админам\n")
     await message.answer(text=text)
 
 
@@ -831,6 +834,133 @@ async def process_callback0(callback_query: types.CallbackQuery):
                                f"Changed from {old_threshold} to {MATCH_THRESHOLD}")
     except:
         pass
+
+
+@dp.message(Command("report"))
+async def cmd_report(message: types.Message):
+    if message.reply_to_message:
+        text_id = str(uuid.uuid4())[:8]
+        message_text = message.reply_to_message.text or message.reply_to_message.caption
+        message_texts[text_id] = message_text
+
+        # Отправляем репорт админам и сохраняем ID сообщения с подтверждением
+        await send_report_to_admins(message.reply_to_message, message, text_id)
+
+        confirmation_message = await message.reply("Спасибо за ваш репорт. Администраторы рассмотрят его в ближайшее время.")
+
+        # Сохраняем ID сообщения с подтверждением
+        admin_messages[message.reply_to_message.message_id]['confirmation_message_id'] = confirmation_message.message_id
+    else:
+        await message.reply("Пожалуйста, используйте эту команду в ответ на сообщение, которое вы хотите зарепортить.")
+
+
+async def send_report_to_admins(reported_message: types.Message, reporter_message: types.Message, text_id: str):
+    report_text = (f"Новый репорт:\n\n"
+                   f"От: {reporter_message.from_user.full_name} (@{reporter_message.from_user.username})\n\n"
+                   f"Репортируемое сообщение:\n"
+                   f"От: {reported_message.from_user.full_name} (@{reported_message.from_user.username})\n"
+                   f"Текст: {reported_message.text or reported_message.caption}\n\n"
+                   f"Выберите действие:")
+
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="Удалить", callback_data=f"report-delete_{reported_message.chat.id}_{reported_message.message_id}_{text_id}")
+    keyboard.button(text="Замутить", callback_data=f"report-mute_{reported_message.chat.id}_{reported_message.message_id}_{text_id}_{reported_message.from_user.id}")
+    keyboard.button(text="Забанить", callback_data=f"report-ban_{reported_message.chat.id}_{reported_message.message_id}_{text_id}_{reported_message.from_user.id}")
+    keyboard.button(text="Пропустить", callback_data=f"report-skip_{reported_message.chat.id}_{reported_message.message_id}_{text_id}")
+    keyboard.adjust(2)
+
+    admin_messages[reported_message.message_id] = {
+        'admins': {},
+        'reporter_message_id': reporter_message.message_id
+    }
+
+    for admin in adminsId:
+        try:
+            sent_message = await bot.send_message(admin, report_text, reply_markup=keyboard.as_markup())
+            admin_messages[reported_message.message_id]['admins'][admin] = sent_message.message_id
+        except Exception as e:
+            print(f"Не удалось отправить репорт админу {admin}: {str(e)}")
+
+
+@dp.callback_query(lambda c: c.data.startswith(('report-delete_', 'report-mute_', 'report-ban_', 'report-skip_')))
+async def process_report_callback(callback_query: types.CallbackQuery):
+    action, *params = callback_query.data.split('_')
+
+    if len(params) < 3:
+        await callback_query.answer("Неверный формат данных", show_alert=True)
+        return
+
+    chat_id = int(params[0])
+    message_id = int(params[1])
+    text_id = params[2] if len(params) > 2 else None
+
+    if action != 'report-skip':
+        try:
+            await bot.delete_message(chat_id, message_id)
+            message_text = message_texts.get(text_id, "")
+            await log_admin_action(callback_query.from_user.id, "delete reported message", f"Deleted message: '{message_text}'")
+        except TelegramBadRequest as e:
+            if "message to delete not found" in str(e):
+                await callback_query.answer("Сообщение уже было удалено", show_alert=True)
+            else:
+                await callback_query.answer(f"Не удалось удалить исходное сообщение: {str(e)}", show_alert=True)
+
+    try:
+        if action == 'report-delete':
+            message_text = message_texts.get(text_id, "")
+            if message_text and message_text not in bad_words and message_text not in delete_list:
+                with open("txts/delete_list.txt", "a", encoding='utf-8') as f:
+                    f.write("\n" + message_text)
+                delete_list.append(message_text)
+            if text_id:
+                del message_texts[text_id]
+            await callback_query.answer("Сообщение удалено.")
+        elif action in ['report-mute', 'report-ban']:
+            if len(params) < 4:
+                await callback_query.answer("Недостаточно данных для выполнения действия", show_alert=True)
+                return
+            user_id = int(params[3])
+            if action == 'report-mute':
+                await bot.restrict_chat_member(chat_id, user_id, types.ChatPermissions(can_send_messages=False))
+                await callback_query.answer("Пользователь замучен на 300 секунд.")
+                await log_admin_action(callback_query.from_user.id, "mute reported user", f"Muted user: {user_id}")
+                asyncio.create_task(unmute_user(chat_id, user_id, 300))
+            elif action == 'report-ban':
+                await bot.ban_chat_member(chat_id, user_id)
+                await callback_query.answer("Пользователь забанен.")
+                await log_admin_action(callback_query.from_user.id, "ban reported user", f"Banned user: {user_id}")
+        elif action == 'report-skip':
+            message_text = message_texts.get(text_id, "")
+            await callback_query.answer("Сообщение пропущено.")
+            await log_admin_action(callback_query.from_user.id, "skip reported message", f"Skipped message: '{message_text}'")
+            if text_id:
+                del message_texts[text_id]
+    except Exception as e:
+        await callback_query.message.answer(f"Не удалось выполнить действие: {str(e)}", show_alert=True)
+
+    # Удаление сообщений с репортом у всех админов
+    if message_id in admin_messages:
+        for admin, admin_message_id in admin_messages[message_id]['admins'].items():
+            try:
+                await bot.delete_message(admin, admin_message_id)
+            except Exception as e:
+                print(f"Не удалось удалить сообщение у админа {admin}: {str(e)}")
+
+        # Удаление сообщения с репортом
+        try:
+            reporter_message_id = admin_messages[message_id]['reporter_message_id']
+            await bot.delete_message(chat_id, reporter_message_id)
+        except Exception as e:
+            print(f"Не удалось удалить сообщение с репортом: {str(e)}")
+
+        # Удаление ответа бота
+        try:
+            confirmation_message_id = admin_messages[message_id]['confirmation_message_id']
+            await bot.delete_message(chat_id, confirmation_message_id)
+        except Exception as e:
+            print(f"Не удалось удалить сообщение с подтверждением репорта: {str(e)}")
+
+        del admin_messages[message_id]
 
 
 # --- Обработчики сообщений ---
