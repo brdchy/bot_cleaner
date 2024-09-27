@@ -8,26 +8,17 @@ from datetime import datetime, timedelta
 import os
 
 from aiogram.filters.command import Command, CommandObject
-from aiogram.types import BotCommand, BotCommandScopeDefault
 from aiogram import F, Bot, Dispatcher, types
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import FSInputFile
 
-from rapidfuzz import fuzz
-from difflib import SequenceMatcher
-
-from settings import BOT_TOKEN
-
-# --- Настройки ---
-ADMINS_FILE = 'txts/admins_list.txt'
-AD_PATTERNS_FILE = 'txts/ad_patterns.csv'
-BAD_WORDS_FILE = 'txts/bad_words.txt'
-WHITE_LIST_FILE = 'txts/white_list.txt'
-DELETE_LIST_FILE = 'txts/delete_list.txt'
-ADMIN_ACTIONS_FILE = 'txts/admin_actions.csv'
-MATCH_THRESHOLD = 1
-MESSAGE_TIMEOUT = 60  # seconds
+from core.settings import BOT_TOKEN
+import core.config as config
+import core.utils.detect as detect
+import core.utils.functions as fc 
+from core.commands import set_commands
 
 # --- Глобальные переменные ---
 logging.basicConfig(level=logging.INFO)
@@ -41,267 +32,23 @@ message_texts = {}
 
 is_delete_ad = False
 is_delete_bw = False
-adminsId = []
-bad_words = []
-white_list = []
-delete_list = []
-ad_patterns = []
 
-
-# --- Загрузка данных ---
-def load_data():
-    global adminsId, bad_words, white_list, delete_list, ad_patterns, russian_words_set
-
-    try:
-        with open(ADMINS_FILE, 'r') as f:
-            adminsId = [int(line.strip()) for line in f if line.strip().isdigit()]
-    except FileNotFoundError:
-        print(f"Файл {ADMINS_FILE} не найден. Создайте файл и добавьте ID админов.")
-        adminsId = []
-    except Exception as e:
-        print(f"Ошибка при загрузке {ADMINS_FILE}: {e}")
-        adminsId = []
-
-    try:
-        with open(BAD_WORDS_FILE, "r", encoding='utf-8') as f:
-            bad_words = [word.replace("\n", "").strip() for word in f.readlines()]
-    except FileNotFoundError:
-        print(f"Файл {BAD_WORDS_FILE} не найден. Создайте файл и добавьте нежелательные слова.")
-        bad_words = []
-    except Exception as e:
-        print(f"Ошибка при загрузке {BAD_WORDS_FILE}: {e}")
-        bad_words = []
-
-    try:
-        with open(WHITE_LIST_FILE, "r", encoding='utf-8') as f:
-            white_list = [word.replace("\n", "").strip() for word in f.readlines()]
-    except FileNotFoundError:
-        print(f"Файл {WHITE_LIST_FILE} не найден. Создайте файл и добавьте разрешенные слова.")
-        white_list = []
-    except Exception as e:
-        print(f"Ошибка при загрузке {WHITE_LIST_FILE}: {e}")
-        white_list = []
-
-    try:
-        with open(DELETE_LIST_FILE, "r", encoding='utf-8') as f:
-            delete_list = [word.strip() for word in f.readlines() if word.strip()]
-    except FileNotFoundError:
-        print(f"Файл {DELETE_LIST_FILE} не найден. Создайте файл и добавьте слова для удаления.")
-        delete_list = []
-    except Exception as e:
-        print(f"Ошибка при загрузке {DELETE_LIST_FILE}: {e}")
-        delete_list = []
-
-    try:
-        with open(AD_PATTERNS_FILE, 'r', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            ad_patterns = [re.compile(r'' + row[0], re.IGNORECASE) for row in reader if row]
-    except FileNotFoundError:
-        print(f"Файл {AD_PATTERNS_FILE} не найден. Создайте файл и добавьте паттерны рекламы.")
-        ad_patterns = []
-    except Exception as e:
-        print(f"Ошибка при загрузке {AD_PATTERNS_FILE}: {e}")
-        ad_patterns = []
-
-
-# --- Утилиты ---
-def extract_regular_chars(text):
-    return re.sub('[^a-zA-Zа-яА-Я0-9\s]', '', text)
-
-
-def replace_english_letters(text):
-    replacements = {
-        'ch': 'ч',
-        'a': 'а',
-        'b': 'б',
-        'c': 'с',
-        'd': 'д',
-        'e': 'е',
-        'f': 'ф',
-        'g': 'г',
-        'h': 'х',
-        'i': 'и',
-        'j': 'ж',
-        'k': 'к',
-        'l': 'л',
-        'm': 'м',
-        'n': 'н',
-        'o': 'о',
-        'p': 'п',
-        'q': 'к',
-        'r': 'г',
-        's': 'с',
-        't': 'т',
-        'u': 'и',
-        'v': 'в',
-        'w': 'ш',
-        'x': 'х',
-        'y': 'у',
-        'z': 'з'
-    }
-    for eng, rus in replacements.items():
-        text = text.replace(eng, rus)
-    return text
-
-
-def similar(a, b):
-    return SequenceMatcher(None, a, b).ratio()
-
-
-def string_to_regex(input_string):
-    letter_to_regex = {
-        'а': '[aа@]',
-        'б': '[bб6]',
-        'в': '[вbv]',
-        'г': '[гr]',
-        'д': '[дd]',
-        'е': '[eе3]',
-        'ё': '[ёeе]',
-        'ж': '[жg]',
-        'з': '[зz3э]',
-        'и': '[иeеu]',
-        'й': '[йuи]',
-        'к': '[кk]',
-        'л': '[лl]',
-        'м': '[мm]',
-        'н': '[н]',
-        'о': '[оo0]',
-        'п': '[пnh]',
-        'р': '[pр]',
-        'с': '[cс]',
-        'т': '[тt]',
-        'у': '[уy]',
-        'ф': '[ф]',
-        'х': '[xх]',
-        'ц': '[ц]',
-        'ч': '[ч4]',
-        'ш': '[шwщ]',
-        'щ': '[шwщ]',
-        'ъ': '[ъ]',
-        'ы': '[ы]',
-        'ь': '[ь]',
-        'э': '[зz3э]',
-        'ю': '[ю]',
-        'я': '[я]',
-
-        'a': '[aа@]',
-        'b': '[bб6]',
-        'c': '[cс]',
-        'd': '[дd]',
-        'e': '[eе3]',
-        'g': '[жg]',
-        'h': '[пnh]',
-        'u': '[иeеu]',
-        'o': '[оo0]',
-        'w': '[шwщ]',
-        'k': '[кk]',
-        't': '[тt]',
-        'm': '[мm]',
-        'v': '[вbv]',
-        'y': '[уy]',
-        'r': '[гr]',
-        'x': '[xх]',
-        'n': '[н]',
-        'p': '[pр]',
-        '6': '[bб6]',
-        '3': '[зz3э]',
-        '0': '[оo0]',
-        '4': '[ч4]'
-    }
-    return ''.join(letter_to_regex.get(char, re.escape(char)) if char != ' ' else r'\s*'
-                   for char in input_string.lower())
-
-
-def regex_to_readable(regex_pattern):
-    readable_dict = {
-        '[aа@]': 'а',
-        '[bб6]': 'б',
-        '[вbv]': 'в',
-        '[гr]': 'г',
-        '[дd]': 'д',
-        '[eе3]': 'е',
-        '[ёeе]': 'ё',
-        '[жg]': 'ж',
-        '[зz3э]': 'з',
-        '[иeеu]': 'и',
-        '[йuи]': 'й',
-        '[кk]': 'к',
-        '[лl]': 'л',
-        '[мm]': 'м',
-        '[пnh]': 'п',
-        '[н]': 'н',
-        '[оo0]': 'о',
-        '[pр]': 'р',
-        '[cс]': 'с',
-        '[тt]': 'т',
-        '[уy]': 'у',
-        '[ф]': 'ф',
-        '[xх]': 'х',
-        '[ц]': 'ц',
-        '[ч4]': 'ч',
-        '[шwщ]': 'ш',
-        '[ъ]': 'ъ',
-        '[ы]': 'ы',
-        '[ь]': 'ь',
-        '[ю]': 'ю',
-        '[я]': 'я', r'\s*': ' '
-    }
-    for regex, char in readable_dict.items():
-        regex_pattern = regex_pattern.replace(regex, char)
-    return regex_pattern
-
-
-def is_bad_word(source: list, dist: str):
-    if dist in white_list:
-        return False
-    for word in source:
-        if word == dist or fuzz.ratio(dist, word) > 85:
-            return True
-    return False
-
-
-def count_ad_matches(text):
-    return sum(1 for pattern in ad_patterns if pattern.search(text))
 
 # --- Обработчики команд ---
-async def set_commands(bot: Bot):
-    commands = [
-        BotCommand(command='start', description='Начало'),
-        BotCommand(command='help', description='Помощь'),
-        BotCommand(command='mode', description='Изменить режим работы'),
-        BotCommand(command='whitelist', description='Добавить слово в белый список'),
-        BotCommand(command='blacklist', description='Добавить слово в черный список'),
-        BotCommand(command='add_pattern', description='Добавить текст в список паттернов рекламы'),
-        BotCommand(command='remove_pattern', description='Удалить паттерн рекламы из списка'),
-        BotCommand(command='watch_patterns', description='Посмотреть список паттернов'),
-        BotCommand(command='change_threshold', description='Изменить порог совпадений'),
-        BotCommand(command='add_admin', description='Добавить пользователя в список админов'),
-        BotCommand(command='remove_admin', description='Убрать админа из списка админов'),
-        BotCommand(command='mute', description='Замутить пользователя'),
-        BotCommand(command='unmute', description='Размутить пользователя'),
-        BotCommand(command='ban', description='Забанить пользователя'),
-        BotCommand(command='get_id', description='узнать user_id пользователя'),
-        BotCommand(command='my_id', description='узнать свой user_id'),
-        BotCommand(command='admin_actions', description='Просмотр последних действий админов'),
-        BotCommand(command='report', description='Отправить репорт админам'),
-    ]
-    await bot.set_my_commands(commands, BotCommandScopeDefault())
-
-
 async def start_bot(bot: Bot):
     await set_commands(bot)
 
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
     await message.answer(text="Привет. Для информации о функционале бота напиши:\n/help")
 
 
 @dp.message(Command("help"))
 async def help(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
     text = ("Команды:\n"
             "/mode - изменить режим работы\n"
@@ -319,15 +66,17 @@ async def help(message: types.Message):
             "/remove_admin <user_id> - убрать админа\n"
             "/mute - замутить пользователя\n"
             "/unmute - размутить пользователя\n"
-            "/ban <user_id> - забанить пользователя\n"
+            "/ban <причина> - забанить пользователя\n"
+            "/unban <user_id> - разбанить пользователя\n"
             "/get_id - узнать user_id пользователя\n"
-            "/report - отправить репорт админам\n")
+            "/report - отправить репорт админам\n"
+            "/file_give - получить файл\n")
     await message.answer(text=text)
 
 
 @dp.message(F.text, Command("admin_actions"))
 async def view_admin_actions(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
 
     admin_actions = load_admin_actions()
@@ -344,13 +93,13 @@ async def view_admin_actions(message: types.Message):
 
 @dp.message(Command("mode"))
 async def change(message: types.Message):
-    if message.from_user.id in adminsId:
+    if message.from_user.id in config.adminsId:
         await send_control_message(message, message.from_user.id)
 
 
 @dp.message(F.text, Command("add_admin"))
 async def add_to_admin_list(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
 
     if message.reply_to_message:
@@ -374,9 +123,9 @@ async def add_to_admin_list(message: types.Message):
             await message.reply(f"Не удалось найти пользователя с ID {args[0]}.")
             return
 
-    if user_id not in adminsId:
-        adminsId.append(user_id)
-        with open(ADMINS_FILE, "a", encoding='utf-8') as f:
+    if user_id not in config.adminsId:
+        config.adminsId.append(user_id)
+        with open(config.ADMINS_FILE, "a", encoding='utf-8') as f:
             f.write(f"\n{user_id}")
         await message.reply(f"Пользователь @{html.escape(username)} (ID: {user_id}) добавлен в список админов.")
         await log_admin_action(message.from_user.id, "add_admin", f"Added admin: {user_id} (@{username})")
@@ -386,7 +135,7 @@ async def add_to_admin_list(message: types.Message):
 
 @dp.message(F.text, Command("remove_admin"))
 async def remove_from_adminlist(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
 
     if message.reply_to_message:
@@ -410,10 +159,10 @@ async def remove_from_adminlist(message: types.Message):
             await message.reply(f"Не удалось найти пользователя с ID {args[0]}.")
             return
 
-    if user_id in adminsId:
-        adminsId.remove(user_id)
-        with open(ADMINS_FILE, "w", encoding='utf-8') as f:
-            f.write("\n".join(map(str, adminsId)))
+    if user_id in config.adminsId:
+        config.adminsId.remove(user_id)
+        with open(config.ADMINS_FILE, "w", encoding='utf-8') as f:
+            f.write("\n".join(map(str, config.adminsId)))
         await message.reply(f"Админ @{html.escape(username)} (ID: {user_id}) удален из списка админов.")
         await log_admin_action(message.from_user.id, "remove_admin", f"Removed admin: {user_id} (@{username})")
     else:
@@ -422,14 +171,14 @@ async def remove_from_adminlist(message: types.Message):
 
 @dp.message(F.text, Command("my_id"))
 async def my_id(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
     await message.answer(f"Ваш ID:\n```{message.from_user.id}```", parse_mode="MarkdownV2")
 
 
 @dp.message(F.text, Command("get_id"))
 async def get_user_id(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
@@ -440,7 +189,7 @@ async def get_user_id(message: types.Message):
 
 @dp.message(F.text, Command("mute"))
 async def mute(message: types.Message, command: CommandObject):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
     duration = 300
     if command.args:
@@ -452,17 +201,16 @@ async def mute(message: types.Message, command: CommandObject):
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
         user = await message.bot.get_chat(user_id)
-        await bot.restrict_chat_member(message.chat.id, user_id, types.ChatPermissions(can_send_messages=False))
+        await bot.restrict_chat_member(message.chat.id, user_id, types.ChatPermissions(can_send_messages=False), until_date=duration)
         await message.answer(f"Пользователь @{user.username} замучен на {duration} секунд.")
         await log_admin_action(message.from_user.id, "mute", f"Muted user: {user_id} (@{user.username}) for {duration} seconds")
-        asyncio.create_task(unmute_user(message.chat.id, user_id, duration))
     else:
         await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
 
 
 @dp.message(F.text, Command("unmute"))
 async def unmute(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
@@ -482,44 +230,68 @@ async def unmute(message: types.Message):
     else:
         await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
 
-
-async def unmute_user(chat_id: int, user_id: int, delay: int):
-    await asyncio.sleep(delay)
-    try:
-        await bot.restrict_chat_member(chat_id, user_id, types.ChatPermissions(
-            can_send_messages=True,
-            can_send_media_messages=True,
-            can_send_other_messages=True,
-            can_add_web_page_previews=True
-        ))
-        print(f"Пользователь {user_id} был автоматически размучен в чате {chat_id}")
-    except Exception as e:
-        print(f"Не удалось размутить пользователя {user_id} в чате {chat_id}: {str(e)}")
-
-
 @dp.message(F.text, Command("ban"))
 async def ban(message: types.Message, command: CommandObject):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
     reason = "не указана"
     if command.args:
         reason = command.args
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
-        user = await message.bot.get_chat(user_id)
+
+        try:
+            user = await bot.get_chat(user_id)
+            username = user.username or "Unknown"   
+        except:
+            username = "Unknown"
         try:
             await bot.ban_chat_member(message.chat.id, user_id)
-            await message.answer(f"Пользователь @{user.username} забанен.\nПричина: {reason}")
-            log_admin_action(message.from_user.id, "ban", f"Banned user: {user_id} Reason: {reason}")
+            await message.answer(f"Пользователь @{username} забанен.\nПричина: {reason}")
+
+            with open(config.BAN_LIST_FILE, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow([user_id, username])
+
+            await log_admin_action(message.from_user.id, "ban", f"Banned user: {user_id} Reason: {reason}")
         except Exception as e:
             await message.reply(f"Не удалось забанить пользователя: {str(e)}")
     else:
         await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
 
 
+@dp.message(Command('unban'))
+async def unban_user(message: types.Message):
+    if message.from_user.id not in config.adminsId:
+        return
+    
+    # Получаем user_id для разбана
+    if message.reply_to_message:
+        # Если команда отправлена в ответ на сообщение
+        user_id = message.reply_to_message.from_user.id
+    elif len(message.text.split()) > 1:
+        # Если user_id указан после команды
+        try:
+            user_id = int(message.text.split()[1])
+        except ValueError:
+            await message.reply("Неверный формат user_id. Используйте числовой ID.")
+            return
+    else:
+        await message.reply("Укажите user_id после команды или ответьте на сообщение пользователя.")
+        return
+
+    try:
+        # Пытаемся разбанить пользователя
+        await bot.unban_chat_member(message.chat.id, user_id)
+        await message.reply(f"Пользователь с ID {user_id} разбанен.")
+        await log_admin_action(message.from_user.id, "ban", f"Unbanned user: {user_id}")
+    except Exception as e:
+        await message.reply(f"Не удалось разбанить пользователя. Ошибка: {str(e)}")
+
+
 @dp.message(F.text, Command("blacklist"))
 async def add_to_blacklist(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
 
     message_text = message.text.split(maxsplit=1)
@@ -528,11 +300,11 @@ async def add_to_blacklist(message: types.Message):
         return
     word = message_text[1]
     if word:
-        if word in bad_words:
+        if word in config.bad_words:
             await message.reply(f"Слово '{word}' уже есть в черном списке.")
         else:
-            bad_words.append(word)
-            with open(BAD_WORDS_FILE, "a", encoding='utf-8') as f:
+            config.bad_words.append(word)
+            with open(config.BAD_WORDS_FILE, "a", encoding='utf-8') as f:
                 f.write("\n" + word)
             await message.reply(f"Слово '{word}' добавлено в черный список.")
             await log_admin_action(message.from_user.id, "blacklist", f"Added word: '{word}'")
@@ -542,7 +314,7 @@ async def add_to_blacklist(message: types.Message):
 
 @dp.message(F.text, Command("whitelist"))
 async def add_to_admin(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
 
     message_text = message.text.split(maxsplit=1)
@@ -552,11 +324,11 @@ async def add_to_admin(message: types.Message):
     word = message_text[1]
 
     if word:
-        if word in white_list:
+        if word in config.white_list:
             await message.reply(f"Слово '{word}' уже есть в белом списке.")
         else:
-            white_list.append(word)
-            with open(WHITE_LIST_FILE, "a", encoding='utf-8') as f:
+            config.white_list.append(word)
+            with open(config.WHITE_LIST_FILE, "a", encoding='utf-8') as f:
                 f.write("\n" + word)
             await message.reply(f"Слово '{word}' добавлено в белый список.")
             await log_admin_action(message.from_user.id, "whitelist", f"Added word: '{word}'")
@@ -566,10 +338,10 @@ async def add_to_admin(message: types.Message):
 
 @dp.message(Command("watch_patterns"))
 async def watch_patterns(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
 
-    with open(AD_PATTERNS_FILE, 'r', newline='', encoding='utf-8') as file:
+    with open(config.AD_PATTERNS_FILE, 'r', newline='', encoding='utf-8') as file:
         reader = csv.reader(file)
         patterns = [row[0] for row in reader if row and row[0].strip()]
 
@@ -577,7 +349,7 @@ async def watch_patterns(message: types.Message):
         await message.reply("Список паттернов пуст.")
         return
 
-    readable_patterns = [f"{i + 1}. {regex_to_readable(pattern)}" for i, pattern in enumerate(patterns)]
+    readable_patterns = [f"{i + 1}. {fc.regex_to_readable(pattern)}" for i, pattern in enumerate(patterns)]
 
     chunk_size = 100
     pattern_chunks = [readable_patterns[i:i + chunk_size] for i in range(0, len(readable_patterns), chunk_size)]
@@ -589,7 +361,7 @@ async def watch_patterns(message: types.Message):
 
 @dp.message(F.text, Command("add_pattern"))
 async def add_pattern(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
 
     pattern_text = message.text.split(maxsplit=1)
@@ -598,10 +370,10 @@ async def add_pattern(message: types.Message):
         return
 
     new_pattern = " ".join(pattern_text[1].strip().split())
-    new_pattern = extract_regular_chars(new_pattern)
-    regex_pattern = string_to_regex(new_pattern)
+    new_pattern = fc.extract_regular_chars(new_pattern)
+    regex_pattern = fc.string_to_regex(new_pattern)
 
-    with open(AD_PATTERNS_FILE, 'r', newline='', encoding='utf-8') as file:
+    with open(config.AD_PATTERNS_FILE, 'r', newline='', encoding='utf-8') as file:
         reader = csv.reader(file)
         existing_patterns = [row[0] for row in reader if row]
 
@@ -627,10 +399,10 @@ async def add_pattern(message: types.Message):
 
 @dp.message(Command("remove_pattern"))
 async def remove_pattern(message: types.Message):
-    if message.from_user.id not in adminsId:
+    if message.from_user.id not in config.adminsId:
         return
 
-    with open(AD_PATTERNS_FILE, 'r', newline='', encoding='utf-8') as file:
+    with open(config.AD_PATTERNS_FILE, 'r', newline='', encoding='utf-8') as file:
         reader = csv.reader(file)
         existing_patterns = [row[0] for row in reader if row and row[0].strip()]
 
@@ -638,13 +410,13 @@ async def remove_pattern(message: types.Message):
         await message.reply("Список паттернов пуст.")
         return
 
-    patterns_list = "\n".join([f"{i + 1}. {regex_to_readable(pattern)}" for i, pattern in enumerate(existing_patterns)])
+    patterns_list = "\n".join([f"{i + 1}. {fc.regex_to_readable(pattern)}" for i, pattern in enumerate(existing_patterns)])
     sent_message = await message.reply(f"Список паттернов:\n\n{patterns_list}\n\nВведите номер паттерна, который вы хотите удалить:")
 
     user_data[message.from_user.id] = {
         'existing_patterns': existing_patterns,
         'waiting_for_pattern_number': True,
-        'timer': asyncio.create_task(clear_user_data(message.from_user.id, MESSAGE_TIMEOUT, sent_message)),
+        'timer': asyncio.create_task(clear_user_data(message.from_user.id, config.MESSAGE_TIMEOUT, sent_message)),
         'sent_message': sent_message
     }
 
@@ -664,7 +436,7 @@ async def process_pattern_number(message: types.Message):
         pattern_to_delete = existing_patterns[pattern_number]
         await delete_pattern_from_database(message, pattern_to_delete)
         await log_admin_action(user_id, "remove_pattern",
-                               f"Removed pattern: '{regex_to_readable(pattern_to_delete)}'")
+                               f"Removed pattern: '{fc.regex_to_readable(pattern_to_delete)}'")
 
         try:
             await user_data[user_id]['sent_message'].delete()
@@ -702,28 +474,27 @@ async def process_pattern_callback(callback_query: types.CallbackQuery):
 
 async def add_pattern_to_database(message: types.Message, new_pattern: str, regex_pattern: str):
     compiled_pattern = re.compile(r'' + regex_pattern, re.IGNORECASE)
-    ad_patterns.append(compiled_pattern)
-    with open(AD_PATTERNS_FILE, 'a', newline='', encoding='utf-8') as file:
+    config.ad_patterns.append(compiled_pattern)
+    with open(config.AD_PATTERNS_FILE, 'a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         writer.writerow([regex_pattern])
     await message.reply(f"Добавлен новый паттерн: {new_pattern}\nРегулярное выражение: {regex_pattern}")
 
 
 async def delete_pattern_from_database(message: types.Message, pattern_to_delete: str):
-    with open(AD_PATTERNS_FILE, 'r', newline='', encoding='utf-8') as file:
+    with open(config.AD_PATTERNS_FILE, 'r', newline='', encoding='utf-8') as file:
         reader = csv.reader(file)
         patterns = list(reader)
 
     patterns = [pattern for pattern in patterns if pattern[0] != pattern_to_delete]
 
-    with open(AD_PATTERNS_FILE, 'w', newline='', encoding='utf-8') as file:
+    with open(config.AD_PATTERNS_FILE, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         writer.writerows(patterns)
 
-    global ad_patterns
-    ad_patterns = [re.compile(r'' + pattern[0], re.IGNORECASE) for pattern in patterns]
+    config.ad_patterns = [re.compile(r'' + pattern[0], re.IGNORECASE) for pattern in patterns]
 
-    await message.reply(f"Паттерн '{regex_to_readable(pattern_to_delete)}' успешно удален.")
+    await message.reply(f"Паттерн '{fc.regex_to_readable(pattern_to_delete)}' успешно удален.")
 
 
 async def send_control_message(message: types.Message, adminId):
@@ -799,7 +570,7 @@ def get_threshold_keyboard():
     buttons = [
         [
             InlineKeyboardButton(text="-1", callback_data="decrease"),
-            InlineKeyboardButton(text=f"{MATCH_THRESHOLD}", callback_data="current"),
+            InlineKeyboardButton(text=f"{config.MATCH_THRESHOLD}", callback_data="current"),
             InlineKeyboardButton(text="+1", callback_data="increase")
         ]
     ]
@@ -815,14 +586,13 @@ async def threshold_command(message: types.Message):
 
 @dp.callback_query(lambda c: c.data in ['decrease', 'current', 'increase'])
 async def process_callback0(callback_query: types.CallbackQuery):
-    global MATCH_THRESHOLD
 
     try:
-        old_threshold = MATCH_THRESHOLD
+        old_threshold = config.MATCH_THRESHOLD
         if callback_query.data == 'decrease':
-            MATCH_THRESHOLD = max(1, MATCH_THRESHOLD - 1)
+            config.MATCH_THRESHOLD = max(1, config.MATCH_THRESHOLD - 1)
         elif callback_query.data == 'increase':
-            MATCH_THRESHOLD += 1
+            config.MATCH_THRESHOLD += 1
 
         await callback_query.answer()
         await callback_query.message.edit_text(
@@ -831,9 +601,44 @@ async def process_callback0(callback_query: types.CallbackQuery):
         )
 
         await log_admin_action(callback_query.from_user.id, "change_threshold",
-                               f"Changed from {old_threshold} to {MATCH_THRESHOLD}")
+                               f"Changed from {old_threshold} to {config.MATCH_THRESHOLD}")
     except:
         pass
+
+
+@dp.message(Command("file_give"))
+async def cmd_give_file(message: types.Message):
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="Удаленная реклама", callback_data=f"file_{config.DELETED_AD_FILE}")
+    keyboard.button(text="Удаленные плохие слова", callback_data=f"file_{config.DELETED_BW_FILE}")
+    keyboard.button(text="Бан лист", callback_data=f"file_{config.BAN_LIST_FILE}")
+    keyboard.adjust(2)
+
+    await message.reply("Выберите нужный файл:", reply_markup=keyboard.as_markup())
+
+
+@dp.callback_query(lambda c: c.data.startswith('file_'))
+async def process_file_choice(callback_query: types.CallbackQuery):
+    file_name = callback_query.data.split("_", 1)[-1]
+
+    if not os.path.exists(file_name):
+        await callback_query.answer(f"Файл '{file_name}' не найден.", show_alert=True)
+        return
+    
+    if os.path.getsize(file_name) == 0:
+        await callback_query.answer(f"Файл '{file_name}' пуст и не может быть отправлен.", show_alert=True)
+        return
+
+    try:
+        file = FSInputFile(file_name)
+        await callback_query.message.reply_document(file)
+        await callback_query.answer()
+    except Exception as e:
+        error_message = str(e)
+        if len(error_message) > 200:
+            error_message = error_message[:197] + "..."
+        print(error_message)
+        await callback_query.answer(f"Ошибка при отправке файла: {error_message}", show_alert=True)
 
 
 @dp.message(Command("report"))
@@ -855,18 +660,20 @@ async def cmd_report(message: types.Message):
 
 
 async def send_report_to_admins(reported_message: types.Message, reporter_message: types.Message, text_id: str):
+    text_to_check = reported_message.text or reported_message.caption
+    text_to_check = " ".join(text_to_check.strip().split())
+
     report_text = (f"Новый репорт:\n\n"
                    f"От: {reporter_message.from_user.full_name} (@{reporter_message.from_user.username})\n\n"
                    f"Репортируемое сообщение:\n"
                    f"От: {reported_message.from_user.full_name} (@{reported_message.from_user.username})\n"
-                   f"Текст: {reported_message.text or reported_message.caption}\n\n"
-                   f"Выберите действие:")
+                   f"Текст: {text_to_check}\n\n"
+                   f"Сообщение с плохим словом или рекламой?")
 
     keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="Удалить", callback_data=f"report-delete_{reported_message.chat.id}_{reported_message.message_id}_{text_id}")
-    keyboard.button(text="Замутить", callback_data=f"report-mute_{reported_message.chat.id}_{reported_message.message_id}_{text_id}_{reported_message.from_user.id}")
-    keyboard.button(text="Забанить", callback_data=f"report-ban_{reported_message.chat.id}_{reported_message.message_id}_{text_id}_{reported_message.from_user.id}")
-    keyboard.button(text="Пропустить", callback_data=f"report-skip_{reported_message.chat.id}_{reported_message.message_id}_{text_id}")
+    keyboard.button(text="С рекламой", callback_data=f"report-type_ad_{reported_message.chat.id}_{reported_message.message_id}_{reported_message.from_user.id}_{text_id}")
+    keyboard.button(text="С плохим словом", callback_data=f"report-type_bw_{reported_message.chat.id}_{reported_message.message_id}_{reported_message.from_user.id}_{text_id}")
+    keyboard.button(text="Нет", callback_data=f"report-type_none_{reported_message.chat.id}_{reported_message.message_id}_{reported_message.from_user.id}_{text_id}")
     keyboard.adjust(2)
 
     admin_messages[reported_message.message_id] = {
@@ -874,12 +681,65 @@ async def send_report_to_admins(reported_message: types.Message, reporter_messag
         'reporter_message_id': reporter_message.message_id
     }
 
-    for admin in adminsId:
+    for admin in config.adminsId:
         try:
             sent_message = await bot.send_message(admin, report_text, reply_markup=keyboard.as_markup())
             admin_messages[reported_message.message_id]['admins'][admin] = sent_message.message_id
         except Exception as e:
             print(f"Не удалось отправить репорт админу {admin}: {str(e)}")
+
+
+@dp.callback_query(lambda c: c.data.startswith('report-type_'))
+async def process_report_type_callback(callback_query: types.CallbackQuery):
+    _, report_type, chat_id, message_id, user_id, text_id = callback_query.data.split('_')
+    chat_id = int(chat_id)
+    message_id = int(message_id)
+    reason = report_type
+
+    if report_type == 'none':
+        await callback_query.answer("Репорт отклонен.")
+
+        message_text = message_texts.get(text_id, "")
+        await log_admin_action(callback_query.from_user.id, "skip reported message", f"Skipped message: '{message_text}'")
+        if text_id:
+            del message_texts[text_id]
+        
+        # Удаление сообщений с репортом у всех админов
+        if message_id in admin_messages:
+            for admin, admin_message_id in admin_messages[message_id]['admins'].items():
+                try:
+                    await bot.delete_message(admin, admin_message_id)
+                except Exception as e:
+                    print(f"Не удалось удалить сообщение у админа {admin}: {str(e)}")
+
+        # Удаление сообщения с репортом
+        try:
+            reporter_message_id = admin_messages[message_id]['reporter_message_id']
+            await bot.delete_message(chat_id, reporter_message_id)
+        except Exception as e:
+            print(f"Не удалось удалить сообщение с репортом: {str(e)}")
+
+        # Удаление ответа бота
+        try:
+            confirmation_message_id = admin_messages[message_id]['confirmation_message_id']
+            await bot.delete_message(chat_id, confirmation_message_id)
+        except Exception as e:
+            print(f"Не удалось удалить сообщение с подтверждением репорта: {str(e)}")
+
+        del admin_messages[message_id]
+        return
+
+    # Создаем новую клавиатуру для действий
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="Удалить", callback_data=f"report-delete_{chat_id}_{message_id}_{user_id}_{text_id}_{reason}")
+    keyboard.button(text="Замутить", callback_data=f"report-mute_{chat_id}_{message_id}_{user_id}_{text_id}_{reason}")
+    keyboard.button(text="Забанить", callback_data=f"report-ban_{chat_id}_{message_id}_{user_id}_{text_id}_{reason}")
+    keyboard.adjust(2)
+
+    await callback_query.message.edit_text(
+        f"{callback_query.message.text}\n\nТип репорта: {'Реклама' if report_type == 'ad' else 'Плохое слово'}\n\nВыберите действие:",
+        reply_markup=keyboard.as_markup()
+    )
 
 
 @dp.callback_query(lambda c: c.data.startswith(('report-delete_', 'report-mute_', 'report-ban_', 'report-skip_')))
@@ -892,49 +752,60 @@ async def process_report_callback(callback_query: types.CallbackQuery):
 
     chat_id = int(params[0])
     message_id = int(params[1])
-    text_id = params[2] if len(params) > 2 else None
+    user_id = int(params[2])
+    text_id = params[3]
+    reason = params[4]
 
-    if action != 'report-skip':
-        try:
-            await bot.delete_message(chat_id, message_id)
-            message_text = message_texts.get(text_id, "")
-            await log_admin_action(callback_query.from_user.id, "delete reported message", f"Deleted message: '{message_text}'")
-        except TelegramBadRequest as e:
-            if "message to delete not found" in str(e):
-                await callback_query.answer("Сообщение уже было удалено", show_alert=True)
-            else:
-                await callback_query.answer(f"Не удалось удалить исходное сообщение: {str(e)}", show_alert=True)
+    try:
+        await bot.delete_message(chat_id, message_id)
+
+        message_text = message_texts.get(text_id, "")
+        await log_admin_action(callback_query.from_user.id, "delete reported message", f"Deleted message: '{message_text}'")
+    except TelegramBadRequest as e:
+        if "message to delete not found" in str(e):
+            await callback_query.answer("Сообщение уже было удалено", show_alert=True)
+        else:
+            await callback_query.answer(f"Не удалось удалить исходное сообщение: {str(e)}", show_alert=True)
+    
+    await increment_violation_count(user_id, reason, message_text)
 
     try:
         if action == 'report-delete':
             message_text = message_texts.get(text_id, "")
-            if message_text and message_text not in bad_words and message_text not in delete_list:
-                with open("txts/delete_list.txt", "a", encoding='utf-8') as f:
-                    f.write("\n" + message_text)
-                delete_list.append(message_text)
+
+            if message_text and message_text not in config.bad_words and message_text not in config.delete_list:
+                with open(config.DELETE_LIST_FILE, "a", newline='', encoding='utf-8') as f:
+                    f.write(message_text + "\n")
+                config.delete_list.append(message_text)
             if text_id:
                 del message_texts[text_id]
             await callback_query.answer("Сообщение удалено.")
         elif action in ['report-mute', 'report-ban']:
-            if len(params) < 4:
+            if len(params) < 3:
                 await callback_query.answer("Недостаточно данных для выполнения действия", show_alert=True)
                 return
             user_id = int(params[3])
             if action == 'report-mute':
-                await bot.restrict_chat_member(chat_id, user_id, types.ChatPermissions(can_send_messages=False))
+                duration = 300
+
+                await bot.restrict_chat_member(chat_id, user_id, types.ChatPermissions(can_send_messages=False), until_date=duration)
                 await callback_query.answer("Пользователь замучен на 300 секунд.")
                 await log_admin_action(callback_query.from_user.id, "mute reported user", f"Muted user: {user_id}")
-                asyncio.create_task(unmute_user(chat_id, user_id, 300))
             elif action == 'report-ban':
                 await bot.ban_chat_member(chat_id, user_id)
                 await callback_query.answer("Пользователь забанен.")
+
+                try:
+                    user = await bot.get_chat(user_id)
+                    username = user.username or "Unknown"
+                except:
+                    username = "Unknown"
+
+                with open(config.BAN_LIST_FILE, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow([user_id, username])
+
                 await log_admin_action(callback_query.from_user.id, "ban reported user", f"Banned user: {user_id}")
-        elif action == 'report-skip':
-            message_text = message_texts.get(text_id, "")
-            await callback_query.answer("Сообщение пропущено.")
-            await log_admin_action(callback_query.from_user.id, "skip reported message", f"Skipped message: '{message_text}'")
-            if text_id:
-                del message_texts[text_id]
     except Exception as e:
         await callback_query.message.answer(f"Не удалось выполнить действие: {str(e)}", show_alert=True)
 
@@ -972,7 +843,7 @@ async def work(message: types.Message):
 
     if text_to_check:
         text_to_check = " ".join(text_to_check.strip().split())
-        if text_to_check in delete_list:
+        if text_to_check in config.delete_list:
             try:
                 await message.delete()
                 return
@@ -980,46 +851,49 @@ async def work(message: types.Message):
                 print(f"Ошибка при удалении сообщения: {e}")
                 return
 
-        bad_words_found = check_bw(text_to_check)
-        ad_patterns_found, is_ad = check_ad(text_to_check)
+        bad_words_found = detect.check_bw(text_to_check)
+        ad_patterns_found, is_ad = detect.check_ad(text_to_check)
 
         if bad_words_found:
             if is_delete_bw:
+                with open(config.DELETED_BW_FILE, "a", encoding='utf-8') as f:
+                    f.write(text_to_check + "\n")
+
+                await increment_violation_count(message.from_user.id, "bw", text_to_check)
+
                 return await message.delete()
             else:
                 return await notify_admins(message, "сообщение с плохим словом", text_to_check, bad_words_found)
-
-        if is_ad:
+        elif is_ad:
             if is_delete_ad:
+                with open(config.DELETED_AD_FILE, "a", encoding='utf-8') as f:
+                    f.write(text_to_check + "\n")
+
+                await increment_violation_count(message.from_user.id, "ad", text_to_check)
+
                 return await message.delete()
             else:
                 return await notify_admins(message, "рекламное сообщение", text_to_check, ad_patterns_found)
 
 
 # --- Вспомогательные функции ---
-def check_bw(message):
-    if message is None:
-        return []
-
-    message_text = extract_regular_chars(message.lower())
-    found_words = set()
-
-    # Проверка слов с пробелами
-    words = message_text.split()
-    for word in words:
-        normalized_word = replace_english_letters(word)
-        if is_bad_word(bad_words, normalized_word):
-            found_words.add(word)
-
-    return list(found_words)
+def read_csv(file_path):
+    result = []
+    with open(file_path, 'r') as file:
+        reader = csv.reader(file)
+        headers = next(reader)  # Пропускаем заголовок
+        for row in reader:
+            result.append(row)
+    return result
 
 
-def check_ad(message):
-    message = extract_regular_chars(message.lower())
-    matches = [regex_to_readable(pattern.pattern) for pattern in ad_patterns if pattern.search(message)]
-    # print(f'\n{message}\n')
-    # print(f'Количество совпадений: {count_ad_matches(message)}')
-    return matches, len(matches) >= MATCH_THRESHOLD
+def get_user_data(csv_file, user_id):
+    csv_data = read_csv(csv_file)
+
+    for row in csv_data:
+        if int(row[0]) == user_id:
+            return int(row[1]), int(row[2])
+    return int(0), int(0)
 
 
 async def notify_admins(message: types.Message, reason: str, message_text, triggers):
@@ -1037,36 +911,99 @@ async def notify_admins(message: types.Message, reason: str, message_text, trigg
     text_id = str(uuid.uuid4())[:8]
     message_texts[text_id] = message_text
 
-    for admin in adminsId:
+    if reason == "сообщение с плохим словом":
+        reason = "bw"
+    else:
+        reason = "ad"
+
+    for admin in config.adminsId:
         keyboard = InlineKeyboardBuilder()
-        keyboard.button(text="Удалить", callback_data=f"delete_{message.chat.id}_{message.message_id}_{text_id}")
-        keyboard.button(text="Замутить", callback_data=f"mute_{message.chat.id}_{message.message_id}_{text_id}_{message.from_user.id}")
-        keyboard.button(text="Забанить", callback_data=f"ban_{message.chat.id}_{message.message_id}_{text_id}_{message.from_user.id}")
-        keyboard.button(text="Пропустить", callback_data=f"skip_{message.chat.id}_{message.message_id}_{text_id}")
+        keyboard.button(text="Удалить", callback_data=f"delete_{message.chat.id}_{message.message_id}_{text_id}_{message.from_user}_{reason}")
+        keyboard.button(text="Замутить", callback_data=f"mute_{message.chat.id}_{message.message_id}_{text_id}_{message.from_user}_{reason}")
+        keyboard.button(text="Забанить", callback_data=f"ban_{message.chat.id}_{message.message_id}_{text_id}_{message.from_user}_{reason}")
+        keyboard.button(text="Пропустить", callback_data=f"skip_{message.chat.id}_{message.message_id}_{text_id}_{message.from_user}_{reason}")
         keyboard.adjust(2)
 
         sent_message = await bot.send_message(admin, admin_message, reply_markup=keyboard.as_markup())
         admin_messages[message.message_id][admin] = sent_message.message_id
 
 
+async def increment_violation_count(user_id, reason, message_text):
+    count_deleted_bw, count_deleted_ad = get_user_data(config.BAN_CANDIDATES_FILE, user_id)
+
+    if reason == "ad":
+        with open(config.DELETED_AD_FILE, "a", newline='', encoding='utf-8') as f:
+            f.write(message_text + "\n")
+        count_deleted_ad += 1
+    else:
+        with open(config.DELETED_BW_FILE, "a", newline='', encoding='utf-8') as f:
+            f.write(message_text+ "\n")
+        count_deleted_bw += 1
+
+    # Читаем все существующие данные
+    all_data = []
+    with open(config.BAN_CANDIDATES_FILE, 'r', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        headers = next(reader)
+
+        for row in reader:
+            if row[1]:
+                all_data.append(row)
+
+    users_id = list(int(row[0]) for row in all_data)
+
+    if user_id in users_id:
+        # Обновляем данные для нужного пользователя
+        updated_data = []
+        for row in all_data:
+            if int(row[0]) == int(user_id):
+                # Увеличиваем счетчики и добавляем новую запись
+                updated_data.append([int(user_id), int(count_deleted_bw), int(count_deleted_ad)])
+            else:
+                updated_data.append(row)
+
+        # Записываем все обновленные данные обратно в файл
+        with open(config.BAN_CANDIDATES_FILE, 'w', newline="", encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+
+            for row in updated_data:
+                writer.writerow(row)
+    else:
+        with open(config.BAN_CANDIDATES_FILE, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([int(user_id), int(count_deleted_bw), int(count_deleted_ad)])
+
+
 @dp.callback_query(lambda c: c.data.startswith(('delete_', 'mute_', 'ban_', 'skip_')))
 async def process_callback(callback_query: types.CallbackQuery):
     action, *params = callback_query.data.split('_')
 
-    if len(params) < 3:
+    if len(params) != 5:
         await callback_query.answer("Неверный формат данных", show_alert=True)
         return
 
     chat_id = int(params[0])
     message_id = int(params[1])
+    text_id = params[2]
+    message_text = message_texts.get(text_id, "")
+    user_id = int(params[3])
 
     if action != 'skip':
         try:
             await bot.delete_message(chat_id, message_id)
 
-            # Извлекаем text_id только если он есть в params
-            text_id = params[2] if len(params) > 2 else None
-            message_text = message_texts.get(text_id, "")
+            if message_text in config.bad_words or message_text in config.delete_list:
+                pass
+            else:
+                with open(config.DELETE_LIST_FILE, "a", newline='', encoding='utf-8') as f:
+                    f.write(message_text + "\n")
+                config.delete_list.append(message_text)
+
+            reason = params[4]
+            await increment_violation_count(user_id, reason, message_text)
+
+            del message_texts[text_id]
 
             await log_admin_action(callback_query.from_user.id, "delete message", f"Deleted message: '{message_text}'")
         except Exception as e:
@@ -1074,18 +1011,6 @@ async def process_callback(callback_query: types.CallbackQuery):
 
     try:
         if action == 'delete':
-            text_id = params[2] if len(params) > 2 else None
-            message_text = message_texts.get(text_id, "")
-
-            if message_text in bad_words or message_text in delete_list:
-                pass
-            else:
-                with open("txts/delete_list.txt", "a", encoding='utf-8') as f:
-                    f.write("\n" + message_text)
-                delete_list.append(message_text)
-
-            del message_texts[text_id]
-
             await callback_query.answer("Сообщение удалено.")
         elif action in ['mute', 'ban']:
             if len(params) < 4:
@@ -1094,19 +1019,28 @@ async def process_callback(callback_query: types.CallbackQuery):
             user_id = int(params[3])
 
             if action == 'mute':
-                await bot.restrict_chat_member(chat_id, user_id, types.ChatPermissions(can_send_messages=False))
+                duration = 300
+                await bot.restrict_chat_member(chat_id, user_id, types.ChatPermissions(can_send_messages=False), until_date=duration)
                 await callback_query.answer("Пользователь замучен на 300 секунд.")
                 await log_admin_action(callback_query.from_user.id, "mute user", f"Muted user: {user_id}")
-
-                asyncio.create_task(unmute_user(chat_id, user_id, 300))
             elif action == 'ban':
+                # with open(config.BAN_LIST_FILE, "a", encoding='utf-8') as f:
+                #     f.write(user_id + "\n")
                 await bot.ban_chat_member(chat_id, user_id)
                 await callback_query.answer("Пользователь забанен.")
+
+                try:
+                    user = await bot.get_chat(user_id)
+                    username = user.username or "Unknown"
+                except:
+                    username = "Unknown"
+
+                with open(config.BAN_LIST_FILE, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow([user_id, username])
+
                 await log_admin_action(callback_query.from_user.id, "ban user", f"Banned user: {user_id}")
         elif action == 'skip':
-            text_id = params[2] if len(params) > 2 else None
-            message_text = message_texts.get(text_id, "")
-
             await callback_query.answer("Сообщение пропущено.")
             await log_admin_action(callback_query.from_user.id, "skip message", f"Skipped message: '{message_text}'")
 
@@ -1126,8 +1060,8 @@ async def process_callback(callback_query: types.CallbackQuery):
 # --- Функции для работы с файлами и логами ---
 def load_admin_actions():
     actions = []
-    if os.path.isfile(ADMIN_ACTIONS_FILE):
-        with open(ADMIN_ACTIONS_FILE, 'r', newline='', encoding='utf-8') as f:
+    if os.path.isfile(config.ADMIN_ACTIONS_FILE):
+        with open(config.ADMIN_ACTIONS_FILE, 'r', newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 actions.append(row)
@@ -1141,7 +1075,7 @@ async def log_admin_action(user_id, action, details=''):
         username = user.user.username or "No username"
     except:
         username = "Unknown"
-    with open(ADMIN_ACTIONS_FILE, 'a', newline='', encoding='utf-8') as f:
+    with open(config.ADMIN_ACTIONS_FILE, 'a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow([timestamp, user_id, f"@{username}", action, details])
 
@@ -1149,13 +1083,13 @@ async def log_admin_action(user_id, action, details=''):
 async def delete_old_records():
     one_day_ago = datetime.now() - timedelta(days=1)
     try:
-        with open(ADMIN_ACTIONS_FILE, 'r', newline='', encoding='utf-8') as file:
+        with open(config.ADMIN_ACTIONS_FILE, 'r', newline='', encoding='utf-8') as file:
             reader = csv.reader(file)
             all_rows = list(reader)
         header = all_rows[0]
         filtered_rows = [row for row in all_rows[1:]
                          if datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S") > one_day_ago]
-        with open(ADMIN_ACTIONS_FILE, 'w', newline='', encoding='utf-8') as file:
+        with open(config.ADMIN_ACTIONS_FILE, 'w', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
             writer.writerow(header)
             writer.writerows(filtered_rows)
@@ -1173,8 +1107,7 @@ async def schedule_delete_old_records():
 
 # --- Запуск бота ---
 async def main(message='Бот запущен'):
-    load_data()
-    for admin in adminsId:
+    for admin in config.adminsId:
         try:
             await bot.send_message(chat_id=admin, text=message)
             await send_control_message(message, admin)
