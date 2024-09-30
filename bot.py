@@ -29,6 +29,7 @@ admin_messages = {}
 temp_patterns = {}
 user_data = {}
 message_texts = {}
+action_storage = {}
 
 is_delete_ad = False
 is_delete_bw = False
@@ -284,7 +285,7 @@ async def unban_user(message: types.Message):
         # Пытаемся разбанить пользователя
         await bot.unban_chat_member(message.chat.id, user_id)
         await message.reply(f"Пользователь с ID {user_id} разбанен.")
-        await log_admin_action(message.from_user.id, "ban", f"Unbanned user: {user_id}")
+        await log_admin_action(message.from_user.id, "unban", f"Unbanned user: {user_id}")
     except Exception as e:
         await message.reply(f"Не удалось разбанить пользователя. Ошибка: {str(e)}")
 
@@ -606,7 +607,7 @@ async def process_callback0(callback_query: types.CallbackQuery):
         pass
 
 
-@dp.message(Command("file_give"))
+@dp.message(Command("file_give")) 
 async def cmd_give_file(message: types.Message):
     keyboard = InlineKeyboardBuilder()
     keyboard.button(text="Удаленная реклама", callback_data=f"file_{config.DELETED_AD_FILE}")
@@ -641,6 +642,28 @@ async def process_file_choice(callback_query: types.CallbackQuery):
         await callback_query.answer(f"Ошибка при отправке файла: {error_message}", show_alert=True)
 
 
+@dp.message(Command("get_username"))
+async def get_username(message: types.Message):
+    # Проверяем, является ли сообщение ответом на другое сообщение
+    if message.reply_to_message:
+        user = message.reply_to_message.from_user
+        username = user.username or f"{user.first_name} {user.last_name}"
+        await message.reply(f"Имя пользователя: @{username}")
+    else:
+        # Если сообщение не является ответом, ищем user_id в аргументах команды
+        args = message.text.split()
+        if len(args) > 1 and args[1].isdigit():
+            user_id = int(args[1])
+            try:
+                user = await bot.get_chat_member(message.chat.id, user_id)
+                username = user.user.username or f"{user.user.first_name} {user.user.last_name}"
+                await message.reply(f"Имя пользователя: @{username}")
+            except Exception as e:
+                await message.reply(f"Ошибка: {str(e)}")
+        else:
+            await message.reply("Пожалуйста, ответьте на сообщение пользователя или укажите user_id.")
+
+
 @dp.message(Command("report"))
 async def cmd_report(message: types.Message):
     if message.reply_to_message:
@@ -659,7 +682,7 @@ async def cmd_report(message: types.Message):
         await message.reply("Пожалуйста, используйте эту команду в ответ на сообщение, которое вы хотите зарепортить.")
 
 
-async def send_report_to_admins(reported_message: types.Message, reporter_message: types.Message, text_id: str):
+async def send_report_to_admins(reported_message: types.Message, reporter_message: types.Message, text_id: str): 
     text_to_check = reported_message.text or reported_message.caption
     text_to_check = " ".join(text_to_check.strip().split())
 
@@ -669,11 +692,22 @@ async def send_report_to_admins(reported_message: types.Message, reporter_messag
                    f"От: {reported_message.from_user.full_name} (@{reported_message.from_user.username})\n"
                    f"Текст: {text_to_check}\n\n"
                    f"Сообщение с плохим словом или рекламой?")
+    
+    action_id = str(uuid.uuid4())[:8]  # Генерируем короткий уникальный идентификатор
+    action_data = {
+        "chat_id": reported_message.chat.id,
+        "message_id": reported_message.message_id,
+        "text_id": text_id,
+        "user_id": reported_message.from_user.id,
+        "reason": ""
+    }
+    # Сохраняем данные в словарь или базу данных
+    action_storage[action_id] = action_data
 
     keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="С рекламой", callback_data=f"report-type_ad_{reported_message.chat.id}_{reported_message.message_id}_{reported_message.from_user.id}_{text_id}")
-    keyboard.button(text="С плохим словом", callback_data=f"report-type_bw_{reported_message.chat.id}_{reported_message.message_id}_{reported_message.from_user.id}_{text_id}")
-    keyboard.button(text="Нет", callback_data=f"report-type_none_{reported_message.chat.id}_{reported_message.message_id}_{reported_message.from_user.id}_{text_id}")
+    keyboard.button(text="С рекламой", callback_data=f"report-type_ad_{action_id}")
+    keyboard.button(text="С плохим словом", callback_data=f"report-type_bw_{action_id}")
+    keyboard.button(text="Нет", callback_data=f"report-type_none_{action_id}")
     keyboard.adjust(2)
 
     admin_messages[reported_message.message_id] = {
@@ -689,12 +723,14 @@ async def send_report_to_admins(reported_message: types.Message, reporter_messag
             print(f"Не удалось отправить репорт админу {admin}: {str(e)}")
 
 
-@dp.callback_query(lambda c: c.data.startswith('report-type_'))
+@dp.callback_query(lambda c: c.data.startswith('report-type_')) 
 async def process_report_type_callback(callback_query: types.CallbackQuery):
-    _, report_type, chat_id, message_id, user_id, text_id = callback_query.data.split('_')
-    chat_id = int(chat_id)
-    message_id = int(message_id)
-    reason = report_type
+    _, report_type, action_id = callback_query.data.split('_')
+    action_data = action_storage[action_id]
+    chat_id = action_data['chat_id']
+    message_id = action_data['message_id']
+    user_id = action_data['user_id']
+    text_id = action_data['text_id']
 
     if report_type == 'none':
         await callback_query.answer("Репорт отклонен.")
@@ -731,9 +767,9 @@ async def process_report_type_callback(callback_query: types.CallbackQuery):
 
     # Создаем новую клавиатуру для действий
     keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="Удалить", callback_data=f"report-delete_{chat_id}_{message_id}_{user_id}_{text_id}_{reason}")
-    keyboard.button(text="Замутить", callback_data=f"report-mute_{chat_id}_{message_id}_{user_id}_{text_id}_{reason}")
-    keyboard.button(text="Забанить", callback_data=f"report-ban_{chat_id}_{message_id}_{user_id}_{text_id}_{reason}")
+    keyboard.button(text="Удалить", callback_data=f"report-delete_{report_type}_{action_id}")
+    keyboard.button(text="Замутить", callback_data=f"report-mute_{report_type}_{action_id}")
+    keyboard.button(text="Забанить", callback_data=f"report-ban_{report_type}_{action_id}")
     keyboard.adjust(2)
 
     await callback_query.message.edit_text(
@@ -744,23 +780,19 @@ async def process_report_type_callback(callback_query: types.CallbackQuery):
 
 @dp.callback_query(lambda c: c.data.startswith(('report-delete_', 'report-mute_', 'report-ban_', 'report-skip_')))
 async def process_report_callback(callback_query: types.CallbackQuery):
-    action, *params = callback_query.data.split('_')
+    action, reason, action_id = callback_query.data.split('_')
 
-    if len(params) < 3:
-        await callback_query.answer("Неверный формат данных", show_alert=True)
-        return
-
-    chat_id = int(params[0])
-    message_id = int(params[1])
-    user_id = int(params[2])
-    text_id = params[3]
-    reason = params[4]
+    report_data = action_storage[action_id]
+    chat_id = report_data['chat_id']
+    message_id = report_data['message_id']
+    user_id = report_data['user_id']
+    text_id = report_data['text_id']
 
     try:
         await bot.delete_message(chat_id, message_id)
 
         message_text = message_texts.get(text_id, "")
-        await log_admin_action(callback_query.from_user.id, "delete reported message", f"Deleted message: '{message_text}'")
+        await log_admin_action(callback_query.from_user.id, f"delete reported {reason}_message ", f"Deleted message: '{message_text}'")
     except TelegramBadRequest as e:
         if "message to delete not found" in str(e):
             await callback_query.answer("Сообщение уже было удалено", show_alert=True)
@@ -781,10 +813,6 @@ async def process_report_callback(callback_query: types.CallbackQuery):
                 del message_texts[text_id]
             await callback_query.answer("Сообщение удалено.")
         elif action in ['report-mute', 'report-ban']:
-            if len(params) < 3:
-                await callback_query.answer("Недостаточно данных для выполнения действия", show_alert=True)
-                return
-            user_id = int(params[3])
             if action == 'report-mute':
                 duration = 300
 
@@ -896,7 +924,7 @@ def get_user_data(csv_file, user_id):
     return int(0), int(0)
 
 
-async def notify_admins(message: types.Message, reason: str, message_text, triggers):
+async def notify_admins(message: types.Message, reason: str, message_text, triggers): 
     global admin_messages
 
     trigger_text = ", ".join(triggers) if triggers else "Не определено"
@@ -911,6 +939,17 @@ async def notify_admins(message: types.Message, reason: str, message_text, trigg
     text_id = str(uuid.uuid4())[:8]
     message_texts[text_id] = message_text
 
+    action_id = str(uuid.uuid4())[:8]  # Генерируем короткий уникальный идентификатор
+    action_data = {
+        "chat_id": message.chat.id,
+        "message_id": message.message_id,
+        "text_id": text_id,
+        "user_id": message.from_user.id,
+        "reason": reason
+    }
+    # Сохраняем данные в словарь или базу данных
+    action_storage[action_id] = action_data
+
     if reason == "сообщение с плохим словом":
         reason = "bw"
     else:
@@ -918,10 +957,10 @@ async def notify_admins(message: types.Message, reason: str, message_text, trigg
 
     for admin in config.adminsId:
         keyboard = InlineKeyboardBuilder()
-        keyboard.button(text="Удалить", callback_data=f"delete_{message.chat.id}_{message.message_id}_{text_id}_{message.from_user}_{reason}")
-        keyboard.button(text="Замутить", callback_data=f"mute_{message.chat.id}_{message.message_id}_{text_id}_{message.from_user}_{reason}")
-        keyboard.button(text="Забанить", callback_data=f"ban_{message.chat.id}_{message.message_id}_{text_id}_{message.from_user}_{reason}")
-        keyboard.button(text="Пропустить", callback_data=f"skip_{message.chat.id}_{message.message_id}_{text_id}_{message.from_user}_{reason}")
+        keyboard.button(text="Удалить", callback_data=f"delete_{action_id}")
+        keyboard.button(text="Замутить", callback_data=f"mute_{action_id}")
+        keyboard.button(text="Забанить", callback_data=f"ban_{action_id}")
+        keyboard.button(text="Пропустить", callback_data=f"skip_{action_id}")
         keyboard.adjust(2)
 
         sent_message = await bot.send_message(admin, admin_message, reply_markup=keyboard.as_markup())
@@ -975,19 +1014,19 @@ async def increment_violation_count(user_id, reason, message_text):
             writer.writerow([int(user_id), int(count_deleted_bw), int(count_deleted_ad)])
 
 
-@dp.callback_query(lambda c: c.data.startswith(('delete_', 'mute_', 'ban_', 'skip_')))
+@dp.callback_query(lambda c: c.data.startswith(('delete_', 'mute_', 'ban_', 'skip_'))) 
 async def process_callback(callback_query: types.CallbackQuery):
-    action, *params = callback_query.data.split('_')
+    action, action_id = callback_query.data.split('_')
 
-    if len(params) != 5:
-        await callback_query.answer("Неверный формат данных", show_alert=True)
-        return
+    action_data = action_storage[action_id]
 
-    chat_id = int(params[0])
-    message_id = int(params[1])
-    text_id = params[2]
+    chat_id = action_data['chat_id']
+    message_id = action_data['message_id']
+    user_id = action_data['user_id']
+    text_id = action_data['text_id']
+    reason = action_data['reason']
+
     message_text = message_texts.get(text_id, "")
-    user_id = int(params[3])
 
     if action != 'skip':
         try:
@@ -1000,7 +1039,6 @@ async def process_callback(callback_query: types.CallbackQuery):
                     f.write(message_text + "\n")
                 config.delete_list.append(message_text)
 
-            reason = params[4]
             await increment_violation_count(user_id, reason, message_text)
 
             del message_texts[text_id]
@@ -1013,11 +1051,6 @@ async def process_callback(callback_query: types.CallbackQuery):
         if action == 'delete':
             await callback_query.answer("Сообщение удалено.")
         elif action in ['mute', 'ban']:
-            if len(params) < 4:
-                await callback_query.answer("Недостаточно данных для выполнения действия", show_alert=True)
-                return
-            user_id = int(params[3])
-
             if action == 'mute':
                 duration = 300
                 await bot.restrict_chat_member(chat_id, user_id, types.ChatPermissions(can_send_messages=False), until_date=duration)
