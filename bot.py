@@ -678,8 +678,43 @@ async def cmd_report(message: types.Message):
 
         # Сохраняем ID сообщения с подтверждением
         admin_messages[message.reply_to_message.message_id]['confirmation_message_id'] = confirmation_message.message_id
+
+        # Удаляем сообщение с командой /report
+        await asyncio.sleep(5)
+        await message.delete()
+        await confirmation_message.delete()
     else:
-        await message.reply("Пожалуйста, используйте эту команду в ответ на сообщение, которое вы хотите зарепортить.")
+        error_message = await message.reply("Пожалуйста, используйте эту команду в ответ на сообщение, которое вы хотите зарепортить.")
+        
+        # Удаляем сообщение с командой /report
+        await message.delete()
+        
+        # Удаляем сообщение об ошибке через 5 секунд
+        await asyncio.sleep(5)
+        await error_message.delete()
+
+
+@dp.message(Command("report"))
+async def cmd_report(message: types.Message):
+    if not message.reply_to_message:
+        error_message = await message.reply("Пожалуйста, используйте эту команду в ответ на сообщение, которое вы хотите зарепортить.")
+        await asyncio.sleep(5)
+        await message.delete()
+        await error_message.delete()
+
+    text_id = str(uuid.uuid4())[:8]
+    message_text = message.reply_to_message.text or message.reply_to_message.caption
+    message_texts[text_id] = message_text
+
+    # Отправляем репорт админам и сохраняем ID сообщения с подтверждением
+    await send_report_to_admins(message.reply_to_message, message, text_id)
+
+    confirmation_message = await message.reply("Спасибо за ваш репорт. Администраторы рассмотрят его в ближайшее время.")
+
+    # Удаляем сообщение с командой /report
+    await asyncio.sleep(5)
+    await message.delete()
+    await confirmation_message.delete()
 
 
 async def send_report_to_admins(reported_message: types.Message, reporter_message: types.Message, text_id: str): 
@@ -712,7 +747,6 @@ async def send_report_to_admins(reported_message: types.Message, reporter_messag
 
     admin_messages[reported_message.message_id] = {
         'admins': {},
-        'reporter_message_id': reporter_message.message_id
     }
 
     for admin in config.adminsId:
@@ -747,20 +781,6 @@ async def process_report_type_callback(callback_query: types.CallbackQuery):
                     await bot.delete_message(admin, admin_message_id)
                 except Exception as e:
                     print(f"Не удалось удалить сообщение у админа {admin}: {str(e)}")
-
-        # Удаление сообщения с репортом
-        try:
-            reporter_message_id = admin_messages[message_id]['reporter_message_id']
-            await bot.delete_message(chat_id, reporter_message_id)
-        except Exception as e:
-            print(f"Не удалось удалить сообщение с репортом: {str(e)}")
-
-        # Удаление ответа бота
-        try:
-            confirmation_message_id = admin_messages[message_id]['confirmation_message_id']
-            await bot.delete_message(chat_id, confirmation_message_id)
-        except Exception as e:
-            print(f"Не удалось удалить сообщение с подтверждением репорта: {str(e)}")
 
         del admin_messages[message_id]
         return
@@ -844,22 +864,6 @@ async def process_report_callback(callback_query: types.CallbackQuery):
                 await bot.delete_message(admin, admin_message_id)
             except Exception as e:
                 print(f"Не удалось удалить сообщение у админа {admin}: {str(e)}")
-
-        # Удаление сообщения с репортом
-        try:
-            reporter_message_id = admin_messages[message_id]['reporter_message_id']
-            await bot.delete_message(chat_id, reporter_message_id)
-        except Exception as e:
-            print(f"Не удалось удалить сообщение с репортом: {str(e)}")
-
-        # Удаление ответа бота
-        try:
-            confirmation_message_id = admin_messages[message_id]['confirmation_message_id']
-            await bot.delete_message(chat_id, confirmation_message_id)
-        except Exception as e:
-            print(f"Не удалось удалить сообщение с подтверждением репорта: {str(e)}")
-
-        del admin_messages[message_id]
 
 
 # --- Обработчики сообщений ---
