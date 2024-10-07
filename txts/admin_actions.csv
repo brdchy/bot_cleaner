@@ -4,3 +4,29 @@ timestamp,user_id,username,action,details
 2024-10-07 02:18:51,410701449,@notbegula1,add_admin,Added admin: 467843804 (@paulund)
 2024-10-07 02:18:51,410701449,@notbegula1,add_admin,Added admin: 937630169 (@Pipapychek)
 2024-10-07 02:22:27,410701449,@notbegula1,add_admin,Added admin: 1149093393 (@fcknguglyboy)
+2024-10-07 02:29:00,410701449,@notbegula1,add_pattern,Added pattern: 'от 18 лет'
+2024-10-07 02:29:06,410701449,@notbegula1,add_pattern,Added pattern: 'подробности в личных сообoениях'
+2024-10-07 02:29:16,410701449,@notbegula1,add_pattern,Added pattern: 'подробности в личных сообщениях'
+2024-10-07 02:29:25,410701449,@notbegula1,add_pattern,Added pattern: 'ишу людей в команду'
+2024-10-07 02:29:28,410701449,@notbegula1,add_pattern,Added pattern: 'приятный заработок'
+2024-10-07 02:29:32,410701449,@notbegula1,add_pattern,Added pattern: 'пишите в лс'
+2024-10-07 02:29:39,410701449,@notbegula1,add_pattern,Added pattern: 'для заработка'
+2024-10-07 02:29:41,410701449,@notbegula1,add_pattern,Added pattern: 'напиши мне в личку'
+2024-10-07 02:29:46,410701449,@notbegula1,add_pattern,Added pattern: 'зарабатывать хорошие дононительные средства'
+2024-10-07 02:29:57,410701449,@notbegula1,add_pattern,Added pattern: 'еженедельный доход'
+2024-10-07 02:29:59,410701449,@notbegula1,add_pattern,Added pattern: 'в личные смс'
+2024-10-07 02:30:02,410701449,@notbegula1,add_pattern,Added pattern: 'удалнная занятость'
+2024-10-07 02:30:10,410701449,@notbegula1,add_pattern,Added pattern: 'в личные сообшения'
+2024-10-07 02:30:12,410701449,@notbegula1,add_pattern,Added pattern: '18 лет'
+2024-10-07 02:30:16,410701449,@notbegula1,add_pattern,Added pattern: 'пушкинской картой'
+2024-10-07 02:30:22,410701449,@notbegula1,add_pattern,Added pattern: 'доп прибыль'
+2024-10-07 02:31:11,410701449,@notbegula1,add_pattern,Added pattern: 'Удаленная занятость'
+2024-10-07 02:32:05,410701449,@notbegula1,add_pattern,Added pattern: 'доход на постоянной основе'
+2024-10-07 02:32:40,410701449,@notbegula1,toggle_delete_bw,Auto delete bad words activated
+2024-10-07 02:32:46,410701449,@notbegula1,toggle_delete_ad,Auto delete ad activated
+2024-10-07 02:34:34,410701449,@notbegula1,whitelist,Added word: 'мучиться'
+2024-10-07 02:34:34,410701449,@notbegula1,whitelist,Added word: 'бат'
+2024-10-07 02:34:34,410701449,@notbegula1,whitelist,Added word: 'бахнуть'
+2024-10-07 02:35:07,410701449,@notbegula1,whitelist,Added word: 'переучиваться'
+2024-10-07 02:35:33,410701449,@notbegula1,whitelist,Added word: 'сумка'
+2024-10-07 02:36:34,410701449,@notbegula1,add_pattern,Added pattern: 'доход'
