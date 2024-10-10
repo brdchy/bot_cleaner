@@ -1,41 +1,4 @@
 timestamp,user_id,username,action,details
-2024-10-07 02:18:50,410701449,@notbegula1,add_admin,Added admin: 1767818385 (@police_of_miami)
-2024-10-07 02:18:50,410701449,@notbegula1,add_admin,Added admin: 622525197 (@officer_of_miami)
-2024-10-07 02:18:51,410701449,@notbegula1,add_admin,Added admin: 467843804 (@paulund)
-2024-10-07 02:18:51,410701449,@notbegula1,add_admin,Added admin: 937630169 (@Pipapychek)
-2024-10-07 02:22:27,410701449,@notbegula1,add_admin,Added admin: 1149093393 (@fcknguglyboy)
-2024-10-07 02:29:00,410701449,@notbegula1,add_pattern,Added pattern: 'от 18 лет'
-2024-10-07 02:29:06,410701449,@notbegula1,add_pattern,Added pattern: 'подробности в личных сообoениях'
-2024-10-07 02:29:16,410701449,@notbegula1,add_pattern,Added pattern: 'подробности в личных сообщениях'
-2024-10-07 02:29:25,410701449,@notbegula1,add_pattern,Added pattern: 'ишу людей в команду'
-2024-10-07 02:29:28,410701449,@notbegula1,add_pattern,Added pattern: 'приятный заработок'
-2024-10-07 02:29:32,410701449,@notbegula1,add_pattern,Added pattern: 'пишите в лс'
-2024-10-07 02:29:39,410701449,@notbegula1,add_pattern,Added pattern: 'для заработка'
-2024-10-07 02:29:41,410701449,@notbegula1,add_pattern,Added pattern: 'напиши мне в личку'
-2024-10-07 02:29:46,410701449,@notbegula1,add_pattern,Added pattern: 'зарабатывать хорошие дононительные средства'
-2024-10-07 02:29:57,410701449,@notbegula1,add_pattern,Added pattern: 'еженедельный доход'
-2024-10-07 02:29:59,410701449,@notbegula1,add_pattern,Added pattern: 'в личные смс'
-2024-10-07 02:30:02,410701449,@notbegula1,add_pattern,Added pattern: 'удалнная занятость'
-2024-10-07 02:30:10,410701449,@notbegula1,add_pattern,Added pattern: 'в личные сообшения'
-2024-10-07 02:30:12,410701449,@notbegula1,add_pattern,Added pattern: '18 лет'
-2024-10-07 02:30:16,410701449,@notbegula1,add_pattern,Added pattern: 'пушкинской картой'
-2024-10-07 02:30:22,410701449,@notbegula1,add_pattern,Added pattern: 'доп прибыль'
-2024-10-07 02:31:11,410701449,@notbegula1,add_pattern,Added pattern: 'Удаленная занятость'
-2024-10-07 02:32:05,410701449,@notbegula1,add_pattern,Added pattern: 'доход на постоянной основе'
-2024-10-07 02:32:40,410701449,@notbegula1,toggle_delete_bw,Auto delete bad words activated
-2024-10-07 02:32:46,410701449,@notbegula1,toggle_delete_ad,Auto delete ad activated
-2024-10-07 02:34:34,410701449,@notbegula1,whitelist,Added word: 'мучиться'
-2024-10-07 02:34:34,410701449,@notbegula1,whitelist,Added word: 'бат'
-2024-10-07 02:34:34,410701449,@notbegula1,whitelist,Added word: 'бахнуть'
-2024-10-07 02:35:07,410701449,@notbegula1,whitelist,Added word: 'переучиваться'
-2024-10-07 02:35:33,410701449,@notbegula1,whitelist,Added word: 'сумка'
-2024-10-07 02:36:34,410701449,@notbegula1,add_pattern,Added pattern: 'доход'
-2024-10-07 08:18:00,467843804,@paulund,delete reported ad_message ,"Deleted message: 'Ищу людей, возьму 2-3 человека 20+ Удаленная деятельность.От 250$  в  день.Кому интересно: Пишите + в сообщения'"
-2024-10-07 08:18:01,467843804,@paulund,ban reported user,Banned user: 6805454220
-2024-10-07 08:18:13,410701449,@notbegula1,add_pattern,Added pattern: 'удалнная деятельность'
-2024-10-07 08:18:51,410701449,@notbegula1,add_pattern,Added pattern: 'в личный чат'
-2024-10-07 12:41:15,410701449,@notbegula1,delete reported ad_message ,Deleted message: 'Есть пpeдложение по coтрудничеству . Cтабильно пoлyчайте от 300 $ в дeнь . Заинтересовалсь - пишите'
-2024-10-07 12:41:17,410701449,@notbegula1,ban reported user,Banned user: 5325767423
 2024-10-08 08:25:59,1149093393,@fcknguglyboy,delete reported ad_message ,"Deleted message: 'Всех приветствую! Пaсcивный зaρaбoтoκ, удaленнαя cфeρa, бeлый и чиcтый фoрмат, c любoй тoчκи миρa.
 Cтрoго 21+ Интеρeснo? ""+"" в личныe.'"
 2024-10-08 08:25:59,1149093393,@fcknguglyboy,ban reported user,Banned user: 7062222021
@@ -43,3 +6,34 @@ Cтрoго 21+ Интеρeснo? ""+"" в личныe.'"
 2024-10-08 12:01:12,896879138,@adontus12,ban reported user,Banned user: 1842078403
 2024-10-08 22:31:36,1149093393,@fcknguglyboy,delete reported ad_message ,Deleted message: 'Предлагаем удаленную работу с высоким заработком – от 120 долларов в день. Полное обучение. Пиши в ЛС.'
 2024-10-08 22:31:36,1149093393,@fcknguglyboy,ban reported user,Banned user: 5189941278
+2024-10-09 01:54:53,937630169,@Pipapychek,skip reported message,"Skipped message: 'Набираю людей для создания приложения как дискорд чтобы вот там в фортнаит  играть
+
+
+Зарплату пока не придумали, но я думаю сначала пачка доширака, а потом писот рублей
+
+Писать в лс только специалистам!!!!! 1!'"
+2024-10-09 02:03:37,410701449,@notbegula1,toggle_delete_bw,Auto delete bad words deactivated
+2024-10-09 02:03:51,410701449,@notbegula1,whitelist,Added word: 'давала'
+2024-10-09 02:03:52,410701449,@notbegula1,delete message,Deleted message: 'Владислав Киналь: Так нам нужно чтобы нейронка давала Алерт и все'
+2024-10-09 02:03:57,410701449,@notbegula1,toggle_delete_bw,Auto delete bad words activated
+2024-10-09 02:40:51,410701449,@notbegula1,skip reported message,"Skipped message: 'мне за одну ночь прилетело дофига репортов, а сейчас мне приходят соо от бехолдера с содержанием none'"
+2024-10-09 06:56:47,896879138,@adontus12,toggle_delete_bw,Auto delete bad words deactivated
+2024-10-09 06:57:01,896879138,@adontus12,whitelist,Added word: 'сидеть'
+2024-10-09 06:57:03,896879138,@adontus12,skip message,"Skipped message: 'как раз размышлял, стоит ли брать Японию или продолжать сидеть на Нидерландах. Последнее просто намного стабильнее, пинг 160~190'"
+2024-10-09 06:57:08,896879138,@adontus12,toggle_delete_bw,Auto delete bad words activated
+2024-10-09 07:03:41,896879138,@adontus12,toggle_delete_bw,Auto delete bad words deactivated
+2024-10-09 07:03:42,896879138,@adontus12,toggle_delete_ad,Auto delete ad deactivated
+2024-10-09 07:04:42,896879138,@adontus12,whitelist,Added word: 'реальные'
+2024-10-09 07:04:43,896879138,@adontus12,skip message,"Skipped message: 'да хотел спросить про реальные тесты и замеры с японских впс, я на нидерландах сижу'"
+2024-10-09 07:17:42,1149093393,@fcknguglyboy,delete message,"Deleted message: 'Ecть варuант заpaботка в удаленном формате! Нужен только тeлeфон или пк. Доход от 870долл. в неделю.Если интересно,пишите мне в лс'"
+2024-10-09 07:17:43,1149093393,@fcknguglyboy,ban user,Banned user: 6849884298
+2024-10-09 07:28:12,467843804,@paulund,delete message,Deleted message: 'Набираем людей для онлайн-заработка от 21 года. Ежеденедельный доход 1500 долларов. По всем вопросам писать в личный чат.'
+2024-10-09 07:28:13,467843804,@paulund,ban user,Banned user: 6997698971
+2024-10-09 07:30:21,410701449,@notbegula1,toggle_delete_bw,Auto delete bad words activated
+2024-10-09 07:31:08,410701449,@notbegula1,toggle_delete_ad,Auto delete ad activated
+2024-10-09 09:31:37,1149093393,@fcknguglyboy,delete reported ad_message ,"Deleted message: 'Ищу паpтнеров, заинтеpесованных в хoрошей дoп пpибыли, диcтанционный формaт, зa вcеми детaлями в лc'"
+2024-10-09 09:31:38,1149093393,@fcknguglyboy,ban reported user,Banned user: 6487817286
+2024-10-09 09:40:30,1149093393,@fcknguglyboy,delete reported ad_message ,Deleted message: 'Ищу людей в сотрудничество. Приятная еженедельная прибыль. За деталями писать личку.'
+2024-10-09 09:40:31,1149093393,@fcknguglyboy,ban reported user,Banned user: 5950561799
+2024-10-09 10:29:44,896879138,@adontus12,delete reported ad_message ,Deleted message: 'Есть пpeдложение по coтрудничеству . Cтабильно пoлyчайте от 300 $ в дeнь . Заинтересовалсь - пишите'
+2024-10-09 10:29:46,896879138,@adontus12,ban reported user,Banned user: 7373178818
