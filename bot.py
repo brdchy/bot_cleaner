@@ -609,6 +609,8 @@ async def process_callback0(callback_query: types.CallbackQuery):
 
 @dp.message(Command("file_give")) 
 async def cmd_give_file(message: types.Message):
+    if message.from_user.id not in config.adminsId:
+        return
     keyboard = InlineKeyboardBuilder()
     keyboard.button(text="Удаленная реклама", callback_data=f"file_{config.DELETED_AD_FILE}")
     keyboard.button(text="Удаленные плохие слова", callback_data=f"file_{config.DELETED_BW_FILE}")
@@ -666,39 +668,9 @@ async def get_username(message: types.Message):
 
 @dp.message(Command("report"))
 async def cmd_report(message: types.Message):
-    if message.reply_to_message:
-        text_id = str(uuid.uuid4())[:8]
-        message_text = message.reply_to_message.text or message.reply_to_message.caption
-        message_texts[text_id] = message_text
-
-        # Отправляем репорт админам и сохраняем ID сообщения с подтверждением
-        await send_report_to_admins(message.reply_to_message, message, text_id)
-
-        confirmation_message = await message.reply("Спасибо за ваш репорт. Администраторы рассмотрят его в ближайшее время.")
-
-        # Сохраняем ID сообщения с подтверждением
-        admin_messages[message.reply_to_message.message_id]['confirmation_message_id'] = confirmation_message.message_id
-
-        # Удаляем сообщение с командой /report
-        await asyncio.sleep(5)
-        await message.delete()
-        await confirmation_message.delete()
-    else:
-        error_message = await message.reply("Пожалуйста, используйте эту команду в ответ на сообщение, которое вы хотите зарепортить.")
-        
-        # Удаляем сообщение с командой /report
-        await message.delete()
-        
-        # Удаляем сообщение об ошибке через 5 секунд
-        await asyncio.sleep(5)
-        await error_message.delete()
-
-
-@dp.message(Command("report"))
-async def cmd_report(message: types.Message):
     if not message.reply_to_message:
         error_message = await message.reply("Пожалуйста, используйте эту команду в ответ на сообщение, которое вы хотите зарепортить.")
-        await asyncio.sleep(5)
+        await asyncio.sleep(8)
         await message.delete()
         await error_message.delete()
 
@@ -712,14 +684,16 @@ async def cmd_report(message: types.Message):
     confirmation_message = await message.reply("Спасибо за ваш репорт. Администраторы рассмотрят его в ближайшее время.")
 
     # Удаляем сообщение с командой /report
-    await asyncio.sleep(5)
+    await asyncio.sleep(8)
     await message.delete()
     await confirmation_message.delete()
 
 
 async def send_report_to_admins(reported_message: types.Message, reporter_message: types.Message, text_id: str): 
     text_to_check = reported_message.text or reported_message.caption
-    text_to_check = " ".join(text_to_check.strip().split())
+    text_to_check = " ".join(text_to_check.split())
+    text_to_check = fc.extract_regular_chars(text_to_check.lower())
+    text_to_check = fc.replace_english_letters(text_to_check)
 
     report_text = (f"Новый репорт:\n\n"
                    f"От: {reporter_message.from_user.full_name} (@{reporter_message.from_user.username})\n\n"
@@ -798,7 +772,7 @@ async def process_report_type_callback(callback_query: types.CallbackQuery):
     )
 
 
-@dp.callback_query(lambda c: c.data.startswith(('report-delete_', 'report-mute_', 'report-ban_', 'report-skip_')))
+@dp.callback_query(lambda c: c.data.startswith(('report-delete_', 'report-mute_', 'report-ban_')))
 async def process_report_callback(callback_query: types.CallbackQuery):
     action, reason, action_id = callback_query.data.split('_')
 
@@ -818,6 +792,11 @@ async def process_report_callback(callback_query: types.CallbackQuery):
             await callback_query.answer("Сообщение уже было удалено", show_alert=True)
         else:
             await callback_query.answer(f"Не удалось удалить исходное сообщение: {str(e)}", show_alert=True)
+    
+    try:
+        await fc.write_ad_file(message_text)
+    except:
+        pass
     
     await increment_violation_count(user_id, reason, message_text)
 
@@ -874,7 +853,10 @@ async def work(message: types.Message):
     text_to_check = message.text or message.caption
 
     if text_to_check:
-        text_to_check = " ".join(text_to_check.strip().split())
+        text_to_check = " ".join(text_to_check.split())
+        text_to_check = fc.extract_regular_chars(text_to_check.lower())
+        text_to_check = fc.replace_english_letters(text_to_check)
+
         if text_to_check in config.delete_list:
             try:
                 await message.delete()
@@ -898,8 +880,7 @@ async def work(message: types.Message):
                 return await notify_admins(message, "сообщение с плохим словом", text_to_check, bad_words_found)
         elif is_ad:
             if is_delete_ad:
-                with open(config.DELETED_AD_FILE, "a", encoding='utf-8') as f:
-                    f.write(text_to_check + "\n")
+                await fc.write_ad_file(text_to_check)
 
                 await increment_violation_count(message.from_user.id, "ad", text_to_check)
 
