@@ -160,3 +160,5 @@ cython_debug/
 #.idea/
 
 settings1.py
+
+ruBERT-large-finetuned*

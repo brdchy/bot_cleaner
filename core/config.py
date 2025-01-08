@@ -14,12 +14,15 @@ BAN_CANDIDATES_FILE = "txts/ban_candidates.csv"
 DELETED_AD_FILE = "txts/deleted_ad.txt"
 DELETED_BW_FILE = "txts/deleted_bw.txt"
 
+WHITE_LIST_USERS_FILE = "txts/base/white_list_users.txt"
 MATCH_THRESHOLD = 1
 MESSAGE_TIMEOUT = 60  # seconds
+BERT_CONFIDENCE_THRESHOLD = 0.9
 
 adminsId = []
 bad_words = []
 white_list = []
+white_list_users = []
 delete_list = []
 ad_patterns = []
 
@@ -50,6 +53,16 @@ def load_data():
 
     try:
         with open(WHITE_LIST_FILE, "r", encoding='utf-8') as f:
+            white_list = [word.replace("\n", "").strip() for word in f.readlines()]
+    except FileNotFoundError:
+        print(f"Файл {WHITE_LIST_FILE} не найден. Создайте файл и добавьте разрешенные слова.")
+        white_list = []
+    except Exception as e:
+        print(f"Ошибка при загрузке {WHITE_LIST_FILE}: {e}")
+        white_list = []
+
+    try:
+        with open(WHITE_LIST_USERS_FILE, "r", encoding='utf-8') as f:
             white_list = [word.replace("\n", "").strip() for word in f.readlines()]
     except FileNotFoundError:
         print(f"Файл {WHITE_LIST_FILE} не найден. Создайте файл и добавьте разрешенные слова.")

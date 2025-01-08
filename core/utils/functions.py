@@ -2,6 +2,12 @@ import re
 from difflib import SequenceMatcher
 import core.config as config
 
+import csv
+from datetime import datetime, timedelta
+import os
+
+from aiogram import F, Bot, Dispatcher, types
+
 
 def extract_regular_chars(text):
     return re.sub('[^a-zA-Zа-яА-Я0-9\s]', '', text)
@@ -168,3 +174,91 @@ async def write_ad_file(text_to_check):
     # Сохраняем уникальные сообщения в новый файл
     with open(config.DELETED_AD_FILE, "w", encoding="utf-8") as output_file:
         output_file.writelines(unique_messages_list)
+
+
+def read_csv(file_path):
+    result = []
+    with open(file_path, 'r') as file:
+        reader = csv.reader(file)
+        headers = next(reader)  # Пропускаем заголовок
+        for row in reader:
+            result.append(row)
+    return result
+
+
+def get_user_data(csv_file, user_id):
+    csv_data = read_csv(csv_file)
+
+    for row in csv_data:
+        if int(row[0]) == user_id:
+            return int(row[1]), int(row[2])
+    return int(0), int(0)
+
+
+def load_admin_actions():
+    actions = []
+    if os.path.isfile(config.ADMIN_ACTIONS_FILE):
+        with open(config.ADMIN_ACTIONS_FILE, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                actions.append(row)
+    return actions
+
+
+async def log_admin_action(bot: Bot, user_id, action, details=''):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        user = await bot.get_chat_member(user_id, user_id)
+        username = user.user.username or "No username"
+    except:
+        username = "Unknown"
+    with open(config.ADMIN_ACTIONS_FILE, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow([timestamp, user_id, f"@{username}", action, details])
+
+
+async def increment_violation_count(user_id, reason, message_text):
+    count_deleted_bw, count_deleted_ad = get_user_data(config.BAN_CANDIDATES_FILE, user_id)
+
+    if reason == "ad":
+        with open(config.DELETED_AD_FILE, "a", newline='', encoding='utf-8') as f:
+            f.write(message_text + "\n")
+        count_deleted_ad += 1
+    else:
+        with open(config.DELETED_BW_FILE, "a", newline='', encoding='utf-8') as f:
+            f.write(message_text+ "\n")
+        count_deleted_bw += 1
+
+    # Читаем все существующие данные
+    all_data = []
+    with open(config.BAN_CANDIDATES_FILE, 'r', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        headers = next(reader)
+
+        for row in reader:
+            if row[1]:
+                all_data.append(row)
+
+    users_id = list(int(row[0]) for row in all_data)
+
+    if user_id in users_id:
+        # Обновляем данные для нужного пользователя
+        updated_data = []
+        for row in all_data:
+            if int(row[0]) == int(user_id):
+                # Увеличиваем счетчики и добавляем новую запись
+                updated_data.append([int(user_id), int(count_deleted_bw), int(count_deleted_ad)])
+            else:
+                updated_data.append(row)
+
+        # Записываем все обновленные данные обратно в файл
+        with open(config.BAN_CANDIDATES_FILE, 'w', newline="", encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+
+            for row in updated_data:
+                writer.writerow(row)
+    else:
+        with open(config.BAN_CANDIDATES_FILE, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([int(user_id), int(count_deleted_bw), int(count_deleted_ad)])
