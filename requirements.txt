@@ -1,2 +1,5 @@
 aiogram
 rapidfuzz
+torch
+transformers
+safetensors
