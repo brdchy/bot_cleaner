@@ -6,6 +6,7 @@ import uuid
 import csv
 from datetime import datetime, timedelta
 import os
+import sys
 
 from aiogram import Router
 from aiogram.filters.command import Command, CommandObject
@@ -29,6 +30,13 @@ user_data = {}
 # message_texts = {}
 # action_storage = {}
 
+@router.message(Command("break"))
+async def cmd_break(message: Message):
+    if message.from_user.id not in config.adminsId:
+        return
+    await message.answer("Бот останавливается немедленно...")
+    # await bot.stop_polling()  # Comment out other methods
+    sys.exit(0)
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
@@ -238,7 +246,7 @@ async def get_user_id(message: Message):
 
 
 @router.message(Command("get_username"))
-async def get_username(message: Message, bot: Bot):
+async def get_username(message: Message):
     # Проверяем, является ли сообщение ответом на другое сообщение
     if message.reply_to_message:
         user = message.reply_to_message.from_user
@@ -250,7 +258,7 @@ async def get_username(message: Message, bot: Bot):
         if len(args) > 1 and args[1].isdigit():
             user_id = int(args[1])
             try:
-                user = await bot.get_chat_member(message.chat.id, user_id)
+                user = await dependencies.bot.get_chat_member(message.chat.id, user_id)
                 username = user.user.username or f"{user.user.first_name} {user.user.last_name}"
                 await message.reply(f"Имя пользователя: @{username}")
             except Exception as e:
@@ -260,7 +268,7 @@ async def get_username(message: Message, bot: Bot):
 
 
 @router.message(F.text, Command("mute"))
-async def mute(bot: Bot, message: Message, command: CommandObject):
+async def mute( message: Message, command: CommandObject):
     if message.from_user.id not in config.adminsId:
         return
     duration = 300
@@ -273,7 +281,7 @@ async def mute(bot: Bot, message: Message, command: CommandObject):
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
         user = await message.bot.get_chat(user_id)
-        await bot.restrict_chat_member(message.chat.id, user_id, types.ChatPermissions(can_send_messages=False), until_date=duration)
+        await dependencies.bot.restrict_chat_member(message.chat.id, user_id, types.ChatPermissions(can_send_messages=False), until_date=duration)
         await message.answer(f"Пользователь @{user.username} замучен на {duration} секунд.")
         await fc.log_admin_action(message.from_user.id, "mute", f"Muted user: {user_id} (@{user.username}) for {duration} seconds")
     else:
@@ -281,13 +289,13 @@ async def mute(bot: Bot, message: Message, command: CommandObject):
 
 
 @router.message(F.text, Command("unmute"))
-async def unmute(bot: Bot, message: Message):
+async def unmute(message: Message):
     if message.from_user.id not in config.adminsId:
         return
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
         user = await message.bot.get_chat(user_id)
-        await bot.restrict_chat_member(
+        await dependencies.bot.restrict_chat_member(
             message.chat.id,
             user_id,
             types.ChatPermissions(
@@ -304,7 +312,7 @@ async def unmute(bot: Bot, message: Message):
 
 
 @router.message(F.text, Command("ban"))
-async def ban(bot: Bot, message: Message, command: CommandObject):
+async def ban(message: Message, command: CommandObject):
     if message.from_user.id not in config.adminsId:
         return
     reason = "не указана"
@@ -314,12 +322,12 @@ async def ban(bot: Bot, message: Message, command: CommandObject):
         user_id = message.reply_to_message.from_user.id
 
         try:
-            user = await bot.get_chat(user_id)
+            user = await dependencies.bot.get_chat(user_id)
             username = user.username or "Unknown"   
         except:
             username = "Unknown"
         try:
-            await bot.ban_chat_member(message.chat.id, user_id)
+            await dependencies.bot.ban_chat_member(message.chat.id, user_id)
             await message.answer(f"Пользователь @{username} забанен.\nПричина: {reason}")
 
             with open(config.BAN_LIST_FILE, 'a', newline='', encoding='utf-8') as f:
@@ -334,7 +342,7 @@ async def ban(bot: Bot, message: Message, command: CommandObject):
 
 
 @router.message(Command('unban'))
-async def unban_user(bot: Bot, message: Message):
+async def unban_user(message: Message):
     if message.from_user.id not in config.adminsId:
         return
     
@@ -355,7 +363,7 @@ async def unban_user(bot: Bot, message: Message):
 
     try:
         # Пытаемся разбанить пользователя
-        await bot.unban_chat_member(message.chat.id, user_id)
+        await dependencies.bot.unban_chat_member(message.chat.id, user_id)
         await message.reply(f"Пользователь с ID {user_id} разбанен.")
         await fc.log_admin_action(message.from_user.id, "unban", f"Unbanned user: {user_id}")
     except Exception as e:
