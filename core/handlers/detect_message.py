@@ -141,6 +141,47 @@ async def notify_admins(message: Message, reason: str, message_text, triggers):
         admin_messages[message.message_id][admin] = sent_message.message_id
 
 
+def increment_count_admin_action(admin_id: str) -> None:
+    """
+    Инкрементирует счетчик действий администратора в файле admin_action_counts.csv.
+    Если администратора нет в файле, добавляет его с счетчиком 1.
+
+    Args:
+        admin_id: Идентификатор администратора, совершившего действие.
+    """
+    action_file = 'count_admin_action.csv'
+    updated = False
+    rows = []
+    try:
+        with open(action_file, 'r', newline='', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile)
+            header = next(reader, None) # Пропускаем заголовок, если есть
+            if header is None:
+                rows.append(['id', 'count']) # Если файл пустой, добавляем заголовок
+            else:
+                rows.append(header)
+                for row in reader:
+                    if row and row[0] == admin_id:
+                        row[1] = str(int(row[1]) + 1)
+                        updated = True
+                    rows.append(row)
+
+        if not updated:
+            rows.append([admin_id, '1'])
+
+        with open(action_file, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerows(rows)
+
+    except FileNotFoundError:
+        with open(action_file, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['id', 'count'])
+            writer.writerow([admin_id, '1'])
+    except Exception as e:
+        print(f"Ошибка при обновлении счетчика действий админа: {e}")
+        
+
 @router.callback_query(lambda c: c.data.startswith(('delete_', 'mute_', 'ban_', 'skip_'))) 
 async def process_callback(callback_query: types.CallbackQuery):
     action, action_id = callback_query.data.split('_')
@@ -154,6 +195,8 @@ async def process_callback(callback_query: types.CallbackQuery):
     reason = action_data['reason']
 
     message_text = message_texts.get(text_id, "")
+
+    increment_count_admin_action(callback_query.from_user.id)
 
     if action != 'skip':
         try:

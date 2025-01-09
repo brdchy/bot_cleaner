@@ -39,6 +39,47 @@ async def start_bot(bot: Bot):
     await set_commands(bot)
 
 
+def increment_count_report(user_id: str) -> None:
+    """
+    Инкрементирует счетчик репортов для определенного пользователя в файле report_counts.csv.
+    Если пользователя нет в файле, добавляет его с счетчиком 1.
+
+    Args:
+        user_id: Идентификатор пользователя, оставившего репорт.
+    """
+    report_file = 'count_report.csv'
+    updated = False
+    rows = []
+    try:
+        with open(report_file, 'r', newline='', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile)
+            header = next(reader, None)  # Пропускаем заголовок, если есть
+            if header is None:
+                rows.append(['id', 'count']) # Если файл пустой, добавляем заголовок
+            else:
+                rows.append(header)
+                for row in reader:
+                    if row and row[0] == user_id:
+                        row[1] = str(int(row[1]) + 1)
+                        updated = True
+                    rows.append(row)
+
+        if not updated:
+            rows.append([user_id, '1'])
+
+        with open(report_file, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerows(rows)
+
+    except FileNotFoundError:
+        with open(report_file, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['id', 'count'])
+            writer.writerow([user_id, '1'])
+    except Exception as e:
+        print(f"Ошибка при обновлении счетчика репортов: {e}")
+
+
 @dp.message(Command("report"))
 async def cmd_report(message: Message):
     if not message.reply_to_message:
@@ -46,6 +87,8 @@ async def cmd_report(message: Message):
         await asyncio.sleep(8)
         await message.delete()
         await error_message.delete()
+
+    increment_count_report(message.from_user.id)
 
     text_id = str(uuid.uuid4())[:8]
     message_text = message.reply_to_message.text or message.reply_to_message.caption
@@ -116,6 +159,8 @@ async def process_report_type_callback(callback_query: types.CallbackQuery):
     if report_type == 'none':
         await callback_query.answer("Репорт отклонен.")
 
+        increment_count_admin_action(callback_query.from_user.id)
+
         message_text = message_texts.get(text_id, "")
         await fc.log_admin_action(callback_query.from_user.id, "skip reported message", f"Skipped message: '{message_text}'")
         if text_id:
@@ -145,6 +190,47 @@ async def process_report_type_callback(callback_query: types.CallbackQuery):
     )
 
 
+def increment_count_admin_action(admin_id: str) -> None:
+    """
+    Инкрементирует счетчик действий администратора в файле admin_action_counts.csv.
+    Если администратора нет в файле, добавляет его с счетчиком 1.
+
+    Args:
+        admin_id: Идентификатор администратора, совершившего действие.
+    """
+    action_file = 'count_admin_action.csv'
+    updated = False
+    rows = []
+    try:
+        with open(action_file, 'r', newline='', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile)
+            header = next(reader, None) # Пропускаем заголовок, если есть
+            if header is None:
+                rows.append(['id', 'count']) # Если файл пустой, добавляем заголовок
+            else:
+                rows.append(header)
+                for row in reader:
+                    if row and row[0] == admin_id:
+                        row[1] = str(int(row[1]) + 1)
+                        updated = True
+                    rows.append(row)
+
+        if not updated:
+            rows.append([admin_id, '1'])
+
+        with open(action_file, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerows(rows)
+
+    except FileNotFoundError:
+        with open(action_file, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['id', 'count'])
+            writer.writerow([admin_id, '1'])
+    except Exception as e:
+        print(f"Ошибка при обновлении счетчика действий админа: {e}")
+
+
 @dp.callback_query(lambda c: c.data.startswith(('report-delete_', 'report-mute_', 'report-ban_')))
 async def process_report_callback(callback_query: types.CallbackQuery):
     action, reason, action_id = callback_query.data.split('_')
@@ -154,6 +240,8 @@ async def process_report_callback(callback_query: types.CallbackQuery):
     message_id = report_data['message_id']
     user_id = report_data['user_id']
     text_id = report_data['text_id']
+
+    increment_count_admin_action(callback_query.from_user.id)
 
     try:
         await dependencies.bot.delete_message(chat_id, message_id)
