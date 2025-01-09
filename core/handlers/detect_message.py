@@ -161,7 +161,7 @@ def increment_count_admin_action(admin_id: str) -> None:
             else:
                 rows.append(header)
                 for row in reader:
-                    if row and row[0] == admin_id:
+                    if row and int(row[0]) == admin_id:
                         row[1] = str(int(row[1]) + 1)
                         updated = True
                     rows.append(row)
