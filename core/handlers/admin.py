@@ -130,8 +130,8 @@ async def toggle_delete(callback: CallbackQuery):
         await callback.answer(text=f'Auto delete bad words {state}')
         await fc.log_admin_action(callback.from_user.id, "toggle_delete_bw", f"Auto delete bad words {state}")
     elif feature == "ad":
-        is_delete_ad = not is_delete_ad
-        state = "activated" if is_delete_ad else "deactivated"
+        dependencies.is_delete_ad = not dependencies.is_delete_ad
+        state = "activated" if dependencies.is_delete_ad else "deactivated"
         await callback.answer(text=f'Auto delete ad {state}')
         await fc.log_admin_action(callback.from_user.id, "toggle_delete_ad", f"Auto delete ad {state}")
 
