@@ -7,6 +7,9 @@ from datetime import datetime, timedelta
 import os
 
 from aiogram import F, Bot, Dispatcher, types
+import asyncio
+import logging
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 
 
 def extract_regular_chars(text):
@@ -262,3 +265,12 @@ async def increment_violation_count(user_id, reason, message_text):
         with open(config.BAN_CANDIDATES_FILE, 'a', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow([int(user_id), int(count_deleted_bw), int(count_deleted_ad)])
+
+
+async def delete_message_with_delay(message: Message, delay: int = 5):
+    """Удаляет сообщение с задержкой."""
+    await asyncio.sleep(delay)
+    try:
+        await message.delete()
+    except Exception as e:
+        logging.error(f"Error deleting message: {e}")

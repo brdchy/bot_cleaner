@@ -97,9 +97,6 @@ async def change(message: Message):
 
 
 async def send_control_message(message: Message, adminId):
-    global is_delete_bw
-    global is_delete_ad
-
     buttons = InlineKeyboardBuilder()
     buttons = [
         [
@@ -121,8 +118,6 @@ async def send_control_message(message: Message, adminId):
 
 @router.callback_query(F.data.startswith("toggle_delete_"))
 async def toggle_delete(callback: CallbackQuery):
-    global is_delete_bw, is_delete_ad
-
     feature = callback.data.split("_")[-1]
     if feature == "bw":
         dependencies.is_delete_bw = not dependencies.is_delete_bw
@@ -167,15 +162,17 @@ async def add_to_admin_list(message: Message):
     else:
         args = message.text.split()[1:]
         if not args:
-            await message.reply("Использование: /add_admin <user_id> или ответьте на сообщение пользователя командой /add_admin")
+            msg = await message.reply("Использование: /add_admin <user_id> или ответьте на сообщение пользователя командой /add_admin")
+            fc.delete_message_with_delay(msg)
             return
 
         try:
             user_id = int(args[0])
-            user = await message.bot.get_chat(user_id)
-            username = user.username or "без имени пользователя"
+            user = await dependencies.bot.get_chat_member(message.chat.id, user_id)
+            username = user.user.username or "без имени пользователя"
         except ValueError:
-            await message.reply("Некорректный ID пользователя. Используйте число или ответьте на сообщение пользователя.")
+            msg = await message.reply("Некорректный ID пользователя. Используйте число или ответьте на сообщение пользователя.")
+            fc.delete_message_with_delay(msg)
             return
         except Exception:
             await message.reply(f"Не удалось найти пользователя с ID {args[0]}.")
@@ -203,13 +200,14 @@ async def remove_from_adminlist(message: Message):
     else:
         args = message.text.split()[1:]
         if not args:
-            await message.reply("Использование: /remove_admin <user_id> или ответьте на сообщение пользователя командой /remove_admin")
+            msg = await message.reply("Использование: /remove_admin <user_id> или ответьте на сообщение пользователя командой /remove_admin")
+            fc.delete_message_with_delay(msg)
             return
 
         try:
             user_id = int(args[0])
-            user = await message.bot.get_chat(user_id)
-            username = user.username or "без имени пользователя"
+            user = await dependencies.bot.get_chat_member(message.chat.id, user_id)
+            username = user.user.username or "без имени пользователя"
         except ValueError:
             await message.reply("Некорректный ID пользователя. Используйте число или ответьте на сообщение пользователя.")
             return
@@ -242,7 +240,8 @@ async def get_user_id(message: Message):
         user_id = message.reply_to_message.from_user.id
         await message.reply(f"ID пользователя:\n```{user_id}```", parse_mode="MarkdownV2")
     else:
-        await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+        msg = await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+        fc.delete_message_with_delay(msg)
 
 
 @router.message(Command("get_username"))
@@ -276,7 +275,8 @@ async def mute( message: Message, command: CommandObject):
         try:
             duration = int(command.args)
         except ValueError:
-            await message.reply("Неверный формат. Используйте: /mute <количество_секунд>")
+            msg = await message.reply("Неверный формат. Используйте: /mute <количество_секунд>")
+            fc.delete_message_with_delay(msg)
             return
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
@@ -285,7 +285,8 @@ async def mute( message: Message, command: CommandObject):
         await message.answer(f"Пользователь @{user.username} замучен на {duration} секунд.")
         await fc.log_admin_action(message.from_user.id, "mute", f"Muted user: {user_id} (@{user.username}) for {duration} seconds")
     else:
-        await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+        msg = await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+        fc.delete_message_with_delay(msg)
 
 
 @router.message(F.text, Command("unmute"))
@@ -338,7 +339,8 @@ async def ban(message: Message, command: CommandObject):
         except Exception as e:
             await message.reply(f"Не удалось забанить пользователя: {str(e)}")
     else:
-        await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+        msg = await message.reply("Эта команда должна быть использована в ответ на сообщение пользователя.")
+        fc.delete_message_with_delay(msg)
 
 
 @router.message(Command('unban'))
@@ -355,10 +357,12 @@ async def unban_user(message: Message):
         try:
             user_id = int(message.text.split()[1])
         except ValueError:
-            await message.reply("Неверный формат user_id. Используйте числовой ID.")
+            msg = await message.reply("Неверный формат user_id. Используйте числовой ID.")
+            fc.delete_message_with_delay(msg)
             return
     else:
-        await message.reply("Укажите user_id после команды или ответьте на сообщение пользователя.")
+        msg = await message.reply("Укажите user_id после команды или ответьте на сообщение пользователя.")
+        fc.delete_message_with_delay(msg)
         return
 
     try:
@@ -447,14 +451,16 @@ async def add_pattern(message: Message):
 
     pattern_text = message.text.split(maxsplit=1)
     if len(pattern_text) < 2:
-        await message.reply("Пожалуйста, укажите текст паттерна рекламы после команды /add_pattern.")
+        msg = await message.reply("Пожалуйста, укажите текст паттерна рекламы после команды /add_pattern.")
+        fc.delete_message_with_delay(msg)
         return
 
     new_pattern = " ".join(pattern_text[1].strip().split())
     new_pattern = fc.extract_regular_chars(new_pattern)
           
     if not new_pattern or new_pattern.isspace():
-        await message.reply("Паттерн не может быть пустым или состоять только из пробелов.")
+        msg = await message.reply("Паттерн не может быть пустым или состоять только из пробелов.")
+        fc.delete_message_with_delay(msg)
         return
 
     regex_pattern = fc.string_to_regex(new_pattern)
@@ -464,7 +470,8 @@ async def add_pattern(message: Message):
         existing_patterns = [row[0] for row in reader if row]
 
     if regex_pattern in existing_patterns:
-        await message.reply(f"Паттерн '{new_pattern}' уже существует в базе.")
+        msg = await message.reply(f"Паттерн '{new_pattern}' уже существует в базе.")
+        fc.delete_message_with_delay(msg)
         return
 
     for existing_pattern in existing_patterns:

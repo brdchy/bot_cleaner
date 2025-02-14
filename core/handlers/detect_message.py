@@ -30,9 +30,6 @@ action_storage = {}
 
 @router.message()
 async def work(message: Message):
-    global is_delete_bw
-    global is_delete_ad
-
     try:
         chat_member = await dependencies.bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status in ["administrator", "creator"] or message.from_user.id in config.white_list_users:

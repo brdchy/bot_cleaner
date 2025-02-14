@@ -39,6 +39,16 @@ async def start_bot(bot: Bot):
     await set_commands(bot)
 
 
+@dp.message(F.new_chat_members)
+async def handle_channel_post(message: types.Message):
+    await dependencies.bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+
+
+@dp.message(F.left_chat_member)
+async def handle_channel_post1(message: types.Message):
+    await dependencies.bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+
+
 def increment_count_report(user_id: str) -> None:
     """
     Инкрементирует счетчик репортов для определенного пользователя в файле report_counts.csv.
@@ -84,9 +94,9 @@ def increment_count_report(user_id: str) -> None:
 async def cmd_report(message: Message):
     if not message.reply_to_message:
         error_message = await message.reply("Пожалуйста, используйте эту команду в ответ на сообщение, которое вы хотите зарепортить.")
-        await asyncio.sleep(8)
-        await message.delete()
-        await error_message.delete()
+        await fc.delete_message_with_delay(message)
+        await fc.delete_message_with_delay(error_message)
+        return
 
     increment_count_report(message.from_user.id)
 
@@ -99,10 +109,8 @@ async def cmd_report(message: Message):
 
     confirmation_message = await message.reply("Спасибо за ваш репорт. Администраторы рассмотрят его в ближайшее время.")
 
-    # Удаляем сообщение с командой /report
-    await asyncio.sleep(8)
-    await message.delete()
-    await confirmation_message.delete()
+    await fc.delete_message_with_delay(message)
+    await fc.delete_message_with_delay(confirmation_message)
 
 
 async def send_report_to_admins(bot: Bot, reported_message: Message, reporter_message: Message, text_id: str): 
